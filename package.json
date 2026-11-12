@@ -1,0 +1,15 @@
+{
+  "name": "lc-form",
+  "private": true,
+  "type": "module",
+  "description": "Builds the Irrevocable Documentary Credit Application (Form LC-01) as a fillable PDF with Acrobat JavaScript checks.",
+  "engines": { "node": ">=23.6" },
+  "scripts": {
+    "build": "node build.ts",
+    "test": "node check.ts",
+    "serve": "npm run build && cp index.html out/ && python3 -m http.server 8090 -d out"
+  },
+  "dependencies": {
+    "pdf-lib": "1.17.1"
+  }
+}
