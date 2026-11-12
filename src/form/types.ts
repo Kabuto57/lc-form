@@ -24,6 +24,7 @@ export interface Field {
   activeIf?: Rule[];     // only answerable when one of these holds (default: the requiredIf rules); greyed and locked otherwise
   max?: number;          // the most characters allowed, as on the bank's form
   format?: Format;       // which keys the box accepts, and what a whole answer must look like
+  beside?: number;       // label beside its box even when the label is long, with a box this wide (13.2)
 }
 
 /**

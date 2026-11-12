@@ -28,6 +28,7 @@ const BOTTOM = 39;   // start a new page below this height (the footer is under 
 const BOX = 15;      // height of a one-line answer box
 const LABEL = 7.5;   // question labels
 const TEXT = 8.5;    // answers, options and tick-box wording
+const GAP_BESIDE = 14.7; // ponytail: matches the hand-placed 13.2 box in the approved 4-page copy
 const COLS = 12;     // the page is a grid of 12 narrow columns; each question takes as many as it needs
 const CGAP = 4;      // gap between columns
 
@@ -156,15 +157,16 @@ async function layoutPdf(t: Template, values: Values, mode: Mode, longExtra: Map
     // A one-line box whose label is short enough: the label beside it, "Name: [          ]", as on the smart form.
     // (Only when the whole line is set this way, so a line never mixes labels beside and above their boxes.)
     const said = shown(f), labelW = inlineLabelW(f);
-    if (inline && canInline(f, w)) {
+    if (f.beside || (inline && canInline(f, w))) {
+      const ly = top - (f.beside ? 9 : 10.5);
       if (draw) {
-        if (no) page.drawText(no, { x, y: top - 10.5, size: LABEL, font: bold, color: ACCENT });
-        blocks.set(f.id, { page, label: { x: x + noW, y: top - 10.5, text: `${said}:` } });
-        page.drawText(`${said}:`, { x: x + noW, y: top - 10.5, size: LABEL, font, color: INK });
-        if (required) page.drawText("*", { x: x + noW + font.widthOfTextAtSize(`${said}:`, LABEL) + 2, y: top - 10.5, size: 8.5, font: bold, color: RED });
-        drawBox(f, x + labelW, top - 1 - BOX, w - labelW, BOX, answer, look, flag);
+        if (no) page.drawText(no, { x, y: ly, size: LABEL, font: bold, color: ACCENT });
+        blocks.set(f.id, { page, label: { x: x + noW, y: ly, text: `${said}:` } });
+        page.drawText(`${said}:`, { x: x + noW, y: ly, size: LABEL, font, color: INK });
+        if (required) page.drawText("*", { x: x + noW + font.widthOfTextAtSize(`${said}:`, LABEL) + 2, y: ly, size: 8.5, font: bold, color: RED });
+        drawBox(f, f.beside ? x + labelW + GAP_BESIDE : x + labelW, top - 1 - BOX, f.beside ?? w - labelW, BOX, answer, look, flag);
       }
-      return BOX + 2;
+      return f.beside ? BOX : BOX + 2;
     }
 
     // Everything else: the label on top (with a red * if mandatory), the box(es) below.
@@ -374,7 +376,7 @@ async function layoutPdf(t: Template, values: Values, mode: Mode, longExtra: Map
       page.drawText("Company stamp", { x: cx + cw - 146, y: top - 39, size: 7, font, color: GREY });
       top -= SIGN;
     }
-    top -= 1;
+    top -= s.fields.some(f => f.beside) ? -2 : 1; // ponytail: the approved 4-page copy ends the Drafts box 3 pt higher
     if (bottom !== undefined) top = Math.min(top, bottom); // as tall as the panel beside it
     outline();
     top -= SECTION_GAP;

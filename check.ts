@@ -6,7 +6,7 @@ import { PDFArray, PDFCheckBox, PDFDict, PDFDocument, PDFDropdown, PDFName, PDFR
 import { LC, LC_SAMPLE } from "./src/lc.ts";
 
 const doc = await PDFDocument.load(readFileSync("out/LC-Application.pdf"));
-assert.equal(doc.getPageCount(), 5);
+assert.equal(doc.getPageCount(), 4);
 assert.equal(doc.getForm().getFields().length, 297);
 
 // The document script "lcRules" (one stream in the catalog's /Names /JavaScript).
@@ -59,4 +59,4 @@ assert.equal(fields.applicant_name.strokeColor, "black");
 // 5. Clearing a mandatory answer turns it red again.
 set("applicant_name", ""); m = lcRules();
 assert.deepEqual([...m], ["Applicant name"]);
-console.log("PASS: 5 pages, 297 fields, rules engine checks OK");
+console.log("PASS: 4 pages, 297 fields, rules engine checks OK");

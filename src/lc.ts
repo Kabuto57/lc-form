@@ -102,7 +102,7 @@ const sections: Section[] = [
   ] },
   { title: "Drafts", fields: [
     tick("drafts", "Drafts for the percentage of invoice value below, at"),
-    text("drafts_percent", "Percentage of invoice value (%)", { requiredIf: ticked("drafts"), format: "number", max: 3 }),
+    text("drafts_percent", "Percentage of invoice value (%)", { requiredIf: ticked("drafts"), format: "number", max: 3, beside: 69.3 }),
     pick("drafts_at", "Drafts at", ["Sight", "Term", "Date"], { requiredIf: ticked("drafts") }),
     text("term_days", "Term: days", { requiredIf: when("drafts_at", "Term"), format: "number" }),
     text("term_after", "days after", { requiredIf: when("drafts_at", "Term"), max: 35 }),

@@ -3,7 +3,7 @@
 This project builds one PDF: the **Irrevocable Documentary Credit Application** (Demo Bank, Form LC-01 · v1.0 · Nov 2026).
 It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page.
 
-- 5 pages: 4 pages of questions, plus the QR code page.
+- 4 pages: 3 pages of questions, plus the QR code page.
 - 297 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and 177 QR rows.
 - Its only dependency is [pdf-lib](https://pdf-lib.js.org). It needs Node.js 23.6 or later, because it runs `.ts` files directly with no build tools.
 
@@ -53,7 +53,7 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
    Tick boxes have their follow-up questions indented under them. Sections 4 (bank use) and 5 sit side by side.
 4. Draws each question: its number (e.g. **13.2**), its label, a red `*` if always mandatory, and its box. Mandatory
    boxes are outlined in red when the form opens. The field name is the question's `id`, and the tooltip is its label.
-5. Adds the page footers ("Form LC-01 · v1.0 · Nov 2026", "< Previous page" / "Next page >" links, "Page n of 5").
+5. Adds the page footers ("Form LC-01 · v1.0 · Nov 2026", "< Previous page" / "Next page >" links, "Page n of 4").
 6. Adds the declaration block, with signature, date and company-stamp lines, and then the QR code page.
 7. Adds the JavaScript (see below).
 
@@ -364,9 +364,10 @@ text("term_days", "Term: days", { requiredIf: when("drafts_at", "Term"), format:
 This line makes a half-width text box named `term_days`, labelled "Term: days". It's mandatory (and unlocked) only
 when Drafts at = Term, and it takes digits only. The other options:
 `...req` (always mandatory), `requiredIf: ticked("x")`, `activeIf: ticked("x")` (applies only when x is ticked, but
-optional), `max: 35`, `format: "amount" | "number" | "phone" | "account"`, and `half: false` (full width).
+optional), `max: 35`, `format: "amount" | "number" | "phone" | "account"`, `half: false` (full width), and
+`beside: 69.3` (label beside a box this wide, even when the label is long; used only by 13.2).
 The layout, numbering, scripts and QR payload all follow from these lines. Then run `npm run build && npm test`.
-`check.ts` expects 5 pages and 297 fields, so update those numbers if you add or remove questions.
+`check.ts` expects 4 pages and 297 fields, so update those numbers if you add or remove questions.
 
 ## Where this came from
 
@@ -376,3 +377,12 @@ The code is unchanged, apart from two things: imports now end in `.ts` so Node r
 "uploaded PDF" branch was removed. With the clock frozen to the same time, this project's output is **byte-for-byte
 identical** to the original repo's `LC-Application-JavaScript.pdf` at that commit. (Without a frozen clock, the
 creation date and the range of the date lists change with the build date.)
+
+**After that, the layout was changed to match the approved 4-page copy (`test form - Copy.pdf`).** At `ce54788`, 13.2
+had its label above its box, which pushed the declaration onto a fourth page of questions. Now 13.2 sits beside its
+box (`beside` in `src/lc.ts` and `src/form/build.ts`, marked `ponytail:`), and the Drafts box ends 3 pt higher.
+Every field's page and position now matches the copy to within 0.1 pt, and so does every line of text on all
+4 pages. The copy has some defects that were deliberately **not** copied:
+- Its section 14 box on page 2 runs down through the footer.
+- It has no warning before save or print, and no pop-up for a wrong format.
+- Its stored `/FormTemplate` is out of date (no 13.2).
