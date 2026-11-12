@@ -5,7 +5,7 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 297 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and 177 QR rows.
-- Needs Python 3.9 or later, and two libraries: PyMuPDF and pikepdf.
+- Needs Python 3.9 or later and **one library, pikepdf**. All its licences are permissive (no GPL/AGPL).
 
 ## Run it
 
@@ -37,30 +37,49 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
 | `helvetica-metrics.json` | Adobe's Helvetica letter widths, so text is measured exactly as Acrobat draws it | Never |
 | `check.py` | The self-check | When you add or remove questions (it counts 297 fields) |
 | `index.html` | The page served by `http.server` | Rarely |
-| `requirements.txt` | The two libraries | When upgrading |
+| `requirements.txt` | pikepdf and its three dependencies, at exact versions | When upgrading (see Security below) |
 
 `build_lc.py` fills each script in `js/` with this form's details (for example, its rules table) and stores them
 in the PDF. The scripts are plain JavaScript files, so they can be read and reviewed on their own.
 
-## Libraries
+## Libraries and licences
 
-| Library | Licence | Used for |
+| Package | Licence | Used for |
 |---|---|---|
-| **PyMuPDF** (`import pymupdf`, also known as `fitz`) | AGPL-3.0, or a commercial licence from Artifex | Draws the pages: header, section boxes and bands, labels, question numbers, footers, the QR code frame |
-| **pikepdf** (built on qpdf) | MPL-2.0 | Writes everything Acrobat needs: the fields and how they look, buttons, page links, the scripts, and the form description stored in the PDF |
-| Python standard library | — | Dates, JSON, compression, file handling, and `http.server` for local hosting |
+| **pikepdf** (bundles the qpdf C++ library, Apache-2.0) | MPL-2.0 | Everything: writes each page's drawing (text, lines, boxes), the fields and how they look, buttons, page links, the scripts and the stored form description |
+| lxml (needed by pikepdf) | BSD-3-Clause | Not used by this project directly |
+| Pillow (needed by pikepdf) | MIT-CMU | Not used by this project directly |
+| packaging (needed by pikepdf) | Apache-2.0 or BSD-2-Clause | Not used by this project directly |
+| Python standard library | PSF | Dates, JSON, compression, file handling, and `http.server` for local hosting |
 
+All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
+your own code. MPL-2.0 only asks that changes to *pikepdf's own files* be shared, and this project doesn't change them.
 There's no QR library: the QR code is made inside the PDF, by `js/qr.js`, when the person presses Generate QR Code.
 
-**Licence note:** PyMuPDF is AGPL-3.0. Using it to *build* the PDF is fine for internal use. If the builder is ever
-offered to others as a service, or shipped inside a product, check the AGPL terms, or Artifex's commercial licence,
-with your legal or IT team. The PDF it produces isn't covered by the AGPL.
+**Why not PyMuPDF or pdf-lib?** Earlier versions used them. PyMuPDF is AGPL-3.0, a licence banks usually avoid, and its
+2.x release installs about a dozen extra AI packages (onnxruntime, numpy, ...). pdf-lib (JavaScript) is MIT but hasn't
+had a release since 2021, so security fixes won't come. pikepdf is permissive, actively maintained, and enough on
+its own: the page drawing is a few PDF commands (`Builder.text`, `line`, `rect`).
+
+## Security
+
+- **What's installed:** 4 packages, about 54 MB, pinned to exact versions in `requirements.txt`. Prebuilt Python
+  packages (wheels) don't run code when installed.
+- **Native code:** pikepdf includes qpdf (C++). Bugs in PDF libraries usually matter when *opening* untrusted PDFs.
+  This builder only *creates* a PDF from `lc.py`, and opens nothing from outside.
+- **Where it runs:** build on a trusted machine, and hand out only the finished PDF. People filling in the form
+  never get the libraries.
+- **What's in the PDF:** JavaScript (the files in `js/`) that runs in each user's Acrobat. This is the same whatever
+  builds the PDF, and it's what the bank's IT policy on Acrobat JavaScript applies to. The scripts only read and
+  write the form's own fields, show messages and print. They make no network calls and open no files.
+- **Upgrading:** to update the libraries, run `.venv/bin/pip install -U pikepdf`, then `.venv/bin/pip freeze >
+  requirements.txt`. Then rebuild, run `check.py`, and test in Acrobat.
 
 ## How the PDF is built
 
 `build_lc.py` works in three steps:
 
-1. **Draw the pages (PyMuPDF), `Builder.draw()`.**
+1. **Draw the pages, `Builder.draw()`.** Each page's text, lines and boxes are written as PDF drawing commands.
    - Header on every page ("DEMO BANK · TRADE SERVICES"); the title and instructions on page 1.
    - Each section: a grey heading bar with its number, then its questions on a 12-column grid. Two short questions
      share a row. A label sits beside its box when the whole row fits ("Name: [   ]"), otherwise above it. Tick boxes
@@ -428,3 +447,5 @@ you add or remove questions, update the field count (297) in `check.py`.
 3. **Moved from TypeScript (pdf-lib) to Python (PyMuPDF + pikepdf).** The Python build gives the same PDF as the
    earlier TypeScript build: same pages, text, fields, positions and scripts. The only pixel differences are how the
    text inside boxes is smoothed ("Pick a date", ticks), and Acrobat redraws those boxes itself.
+4. **PyMuPDF removed (licence and dependencies): pikepdf only.** The page drawing is now written directly as PDF
+   commands. All 4 rendered pages are pixel-identical to the PyMuPDF build.

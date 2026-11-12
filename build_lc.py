@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""BUILDS THE LC APPLICATION PDF (Form LC-01) WITH PyMuPDF AND pikepdf
+"""BUILDS THE LC APPLICATION PDF (Form LC-01) WITH pikepdf
 
     python build_lc.py        -> out/LC-Application.pdf
 
   lc.py                    the form: every question, its options and rules (edit this one)
-  PyMuPDF (pymupdf)        draws the pages: header, section boxes, labels, numbers, footers, the QR code frame
-  pikepdf                  adds what Acrobat needs: the fields and their looks, buttons, page links, the scripts
+  pikepdf                  the only library: writes the pages' drawing (text, lines, boxes) and everything Acrobat
+                           needs: the fields and their looks, buttons, page links, the scripts
   js/*.js                  the JavaScript that runs inside the PDF in Acrobat (rules, Check form, QR code, ...)
   helvetica-metrics.json   Adobe's Helvetica widths, so text is measured exactly as Acrobat draws it
 
-The steps (build() at the end): Builder.draw() lays out the pages with PyMuPDF, Builder.checks() describes the
-scripts, buttons and QR rows, Builder.write() turns everything into PDF objects with pikepdf.
-Coordinates: PDF points, x from the left, y from the BOTTOM (as in the PDF itself); PyMuPDF counts y from the top,
-so the drawing helpers (text, line, rect) turn y around.
+The steps (build() at the end): Builder.draw() lays out the pages (as PDF drawing commands), Builder.checks()
+describes the scripts, buttons and QR rows, Builder.write() turns everything into PDF objects with pikepdf.
+Coordinates: PDF points, x from the left, y from the BOTTOM (as in the PDF itself).
 """
 import datetime
 import io
@@ -23,7 +22,6 @@ import shutil
 import zlib
 
 import pikepdf
-import pymupdf
 from pikepdf import Array, Dictionary, Name, String
 
 from lc import DEFAULTS, LC
@@ -59,7 +57,7 @@ def safe(s):
 
 
 # Adobe's Helvetica metrics (glyph widths and kerning, per 1000 units), so text is measured exactly as Acrobat
-# measures it. PyMuPDF's own Helvetica widths differ slightly.
+# measures it.
 METRICS = json.loads(asset("helvetica-metrics.json"))
 
 
@@ -151,10 +149,21 @@ def jsdumps(o):
 
 
 # ================================================================ BUILD
+class Page:
+    """One page: its number and its drawing commands (PDF content stream operators)."""
+
+    def __init__(self, number):
+        self.number, self.ops = number, []
+
+
+def rgb(c):
+    return " ".join(map(fmt, c))
+
+
 class Builder:
     def __init__(self, t, values, long_extra):
         self.t, self.values, self.long_extra = t, values, long_extra
-        self.doc = pymupdf.open()
+        self.doc = []           # the pages
         self.fields = []        # every field and its widgets, in the order they are made (pikepdf adds them later)
         self.byname = {}
         self.links = []         # page links: (page, rect, to page)
@@ -165,19 +174,20 @@ class Builder:
         self.number = {f["id"]: f"{si + 1}.{qi + 1}" for si, s in enumerate(t["sections"]) for qi, f in enumerate(s["fields"])}
         self.triggers = {r["field"] for f in self.all for r in (f.get("requiredIf") or []) + (f.get("activeIf") or [])}
 
-    # ---- drawing (PyMuPDF counts y from the top)
+    # ---- drawing: PDF content stream commands (F1 = Helvetica, F2 = Helvetica-Bold; text at its baseline)
     def text(self, s, x, y, size, bold=False, color=INK, page=None):
-        (page or self.page).insert_text((x, H - y), s, fontname="hebo" if bold else "helv", fontsize=size, color=color)
+        (page or self.page).ops.append("BT /%s %s Tf %s rg %s %s Td (%s) Tj ET" % ("F2" if bold else "F1", fmt(size), rgb(color), fmt(x), fmt(y), pdfstr(s)))
 
     def line(self, x1, y1, x2, y2, thickness, color, page=None):
-        (page or self.page).draw_line((x1, H - y1), (x2, H - y2), color=color, width=thickness)
+        (page or self.page).ops.append("q %s RG %s w %s %s m %s %s l S Q" % (rgb(color), fmt(thickness), fmt(x1), fmt(y1), fmt(x2), fmt(y2)))
 
     def rect(self, x, y, w, h, fill=None, border=None, bw=1, dashes=None, page=None):
-        (page or self.page).draw_rect(pymupdf.Rect(x, H - y - h, x + w, H - y), color=border, fill=fill,
-                                      width=bw if border else 0, dashes=dashes)
+        op = "q " + (f"{rgb(fill)} rg " if fill else "") + (f"{rgb(border)} RG {fmt(bw)} w " if border else "") + (f"{dashes} d " if dashes else "")
+        (page or self.page).ops.append(op + "%s %s %s %s re %s Q" % (fmt(x), fmt(y), fmt(w), fmt(h), "B" if fill and border else "f" if fill else "S"))
 
     def new_page(self, first=False):
-        self.page = self.doc.new_page(width=W, height=H)
+        self.page = Page(len(self.doc))
+        self.doc.append(self.page)
         who = safe(self.t.get("issuer", "")).upper()
         if who:
             self.text(who, M, H - 22, 9 if first else 7, True, ACCENT)
@@ -560,7 +570,7 @@ class Builder:
         self.text(code, (W - width(code, 7)) / 2, self.qr["y"] - 14, 7, color=GREY)
 
         # 6. Footers, and "< Previous page" / "Next page >" links (plain PDF links: they work with JavaScript off).
-        n = self.doc.page_count
+        n = len(self.doc)
         for i in range(n):
             p = self.doc[i]
             self.line(M, 36, W - M, 36, 0.5, RULE, page=p)
@@ -574,10 +584,14 @@ class Builder:
 
     # ================================================================ pikepdf: fields, scripts, description
     def write(self):
-        pdf = pikepdf.open(io.BytesIO(self.doc.tobytes()))
+        pdf = pikepdf.new()
         self.pdf = pdf
-        pages = [p.obj for p in pdf.pages]
         helv = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding))
+        hebo = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name("/Helvetica-Bold"), Encoding=Name.WinAnsiEncoding))
+        for page in self.doc:   # the drawing, as each page's content stream (WinAnsi text: cp1252)
+            pdf.pages.append(pikepdf.Page(Dictionary(Type=Name.Page, MediaBox=[0, 0, W, H], Resources=Dictionary(Font=Dictionary(F1=helv, F2=hebo)),
+                                                     Contents=pdf.make_stream(zlib.compress(" ".join(page.ops).encode("cp1252", "replace")), Filter=Name.FlateDecode))))
+        pages = [p.obj for p in pdf.pages]
         zadb = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.ZapfDingbats))
         self.fonts = Dictionary(Helvetica=helv, Helv=helv, ZaDb=zadb)
         t = self.t
@@ -828,7 +842,7 @@ class Builder:
                 row = self.field(f"__qr_{y}", "text", max=177, comb=True, da=da)   # comb + read-only
                 self.widget(row, q["x"] + 4 * m, q["y"] + q["size"] - (5 + y) * m, 177 * m, m)
         # Check form / Reset form at the top right of every page (shown on screen, not printed).
-        pages = list(range(self.doc.page_count))
+        pages = list(range(len(self.doc)))
         buttons = [("__check_form", "Check form", script("check-form.js"), 64), ("__reset_form", "Reset form", script("reset-form.js"), 64)]
         for i, (name, caption, code, w) in enumerate(buttons):
             x = W - M - sum(b[3] + 4 for b in buttons[i:]) + 4
@@ -863,7 +877,7 @@ def build(t, values):
     if lasts and first.spare >= 20:
         each = min(90, int((first.spare - 10) // len(lasts)))
         second = once({i: each for i in lasts})
-        if second.doc.page_count == first.doc.page_count:
+        if len(second.doc) == len(first.doc):
             chosen = second
     pdf = chosen.write()
     buf = io.BytesIO()
