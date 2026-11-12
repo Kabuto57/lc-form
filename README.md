@@ -1,23 +1,23 @@
 # LC application form (Form LC-01)
 
 This project builds one PDF: the **Irrevocable Documentary Credit Application** (Demo Bank, Form LC-01 · v1.0 · Nov 2026).
-It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page.
+It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It's built in **Python**.
 
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 297 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and 177 QR rows.
-- Its only dependency is [pdf-lib](https://pdf-lib.js.org). It needs Node.js 23.6 or later, because it runs `.ts` files directly with no build tools.
+- Needs Python 3.9 or later, and two libraries: PyMuPDF and pikepdf.
 
 ## Run it
 
 ```
-npm install
-npm run build   # writes out/LC-Application.pdf
-npm test        # runs the PDF's own rules script on a stand-in for Acrobat (prints PASS)
-npm run serve   # builds, then serves out/ at http://localhost:8090
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python build_lc.py                       # writes out/LC-Application.pdf (and out/index.html)
+.venv/bin/python check.py                          # checks the PDF (prints PASS)
+.venv/bin/python -m http.server 8090 -d out        # serves it at http://localhost:8090 (Ctrl+C stops it)
 ```
 
-`npm run serve` uses Python's built-in web server (`python3`, already on macOS). The page shows the PDF and has a
-download link. Press Ctrl+C to stop it.
+On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`.
 
 **Use Acrobat or Reader to test the form.** The browser's PDF viewer (Chrome, Edge) shows and fills the form, but it
 doesn't run most of the Acrobat JavaScript. So in a browser you won't get the red boxes, locking, Check form or the
@@ -25,40 +25,60 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
 
 ## Files
 
-| File | What it does |
-|---|---|
-| `src/lc.ts` | **The form.** Every question, its options, and its rules, one line each. Edit here. |
-| `src/lists.ts` | ISO currency codes (and countries) for the drop-downs |
-| `src/form/types.ts` | The vocabulary: `Field`, `Rule`, `Section`, `Template`, the answer formats, the allowed characters |
-| `src/form/rules.ts` | "Is this question mandatory now?" and "Does it apply now?" |
-| `src/form/build.ts` | `buildPdf`: lays out the pages (header, sections, question numbers, boxes, footers, page links) |
-| `src/form/look.ts` | Page size, margins, colours, text wrapping |
-| `src/form/dates.ts` | Date questions: a drop-down of real dates, plus Acrobat's calendar box when JavaScript runs |
-| `src/form/acrobat-script.ts` | The JavaScript inside the PDF: the rules engine, Check form, Reset form, the QR code, typing filters |
-| `src/form/red-frames.ts` | Red frames that need no scripts. Used only by the `no-javascript` mode, not by this PDF. |
-| `src/form/stored-template.ts` | Stores the form description (JSON) inside the PDF, under the catalog key `/FormTemplate` |
-| `build.ts` | Entry point: `buildPdf(LC.template, LC.defaults, "javascript")` written to `out/LC-Application.pdf` |
-| `check.ts` | The self-check (`npm test`) |
-| `index.html` | The local page served by `npm run serve` |
+| File | What it does | When you'd change it |
+|---|---|---|
+| `lc.py` | **The form.** Every question, its options and its rules, one line each. Also the currency list and the starting answers. | Wording, questions, rules, limits |
+| `build_lc.py` | The builder. Lays out the pages, makes the fields, buttons and links, and puts the scripts in. | Layout, spacing, colours, fonts |
+| `js/rules.js` | The rules engine that runs in Acrobat: red boxes, locking, clearing, format and cross-checks | How checking behaves |
+| `js/payload.js` | Makes the QR code's text (the answers as JSON) | What the QR code holds |
+| `js/qr.js` | The QR code encoder, and drawing the code into the 177 rows | Rarely (it's a standard QR encoder) |
+| `js/check-form.js`, `reset-form.js`, `generate-qr.js`, `print-form.js` | What each button does | Button messages and behaviour |
+| `js/before-save.js` | The warning before saving or printing an incomplete form | That warning |
+| `helvetica-metrics.json` | Adobe's Helvetica letter widths, so text is measured exactly as Acrobat draws it | Never |
+| `check.py` | The self-check | When you add or remove questions (it counts 297 fields) |
+| `index.html` | The page served by `http.server` | Rarely |
+| `requirements.txt` | The two libraries | When upgrading |
+
+`build_lc.py` fills each script in `js/` with this form's details (for example, its rules table) and stores them
+in the PDF. The scripts are plain JavaScript files, so they can be read and reviewed on their own.
+
+## Libraries
+
+| Library | Licence | Used for |
+|---|---|---|
+| **PyMuPDF** (`import pymupdf`, also known as `fitz`) | AGPL-3.0, or a commercial licence from Artifex | Draws the pages: header, section boxes and bands, labels, question numbers, footers, the QR code frame |
+| **pikepdf** (built on qpdf) | MPL-2.0 | Writes everything Acrobat needs: the fields and how they look, buttons, page links, the scripts, and the form description stored in the PDF |
+| Python standard library | — | Dates, JSON, compression, file handling, and `http.server` for local hosting |
+
+There's no QR library: the QR code is made inside the PDF, by `js/qr.js`, when the person presses Generate QR Code.
+
+**Licence note:** PyMuPDF is AGPL-3.0. Using it to *build* the PDF is fine for internal use. If the builder is ever
+offered to others as a service, or shipped inside a product, check the AGPL terms, or Artifex's commercial licence,
+with your legal or IT team. The PDF it produces isn't covered by the AGPL.
 
 ## How the PDF is built
 
-`buildPdf` (in `src/form/build.ts`) does these steps:
+`build_lc.py` works in three steps:
 
-1. Stores the form description (`LC.template`) as JSON inside the PDF.
-2. Draws the header on every page: "DEMO BANK · TRADE SERVICES", plus the **Check form** and **Reset form** buttons
-   (on screen only, never printed). Then the title and instructions on page 1.
-3. Draws each section: a grey heading bar with its number, then its questions on a 12-column grid. Two short
-   questions share a row. A label sits beside its box when the whole row fits ("Name: [   ]"), otherwise above it.
-   Tick boxes have their follow-up questions indented under them. Sections 4 (bank use) and 5 sit side by side.
-4. Draws each question: its number (e.g. **13.2**), its label, a red `*` if always mandatory, and its box. Mandatory
-   boxes are outlined in red when the form opens. The field name is the question's `id`, and the tooltip is its label.
-5. Adds the page footers ("Form LC-01 · v1.0 · Nov 2026", "< Previous page" / "Next page >" links, "Page n of 4").
-6. Adds the declaration block, with signature, date and company-stamp lines, and then the QR code page.
-7. Adds the JavaScript (see below).
+1. **Draw the pages (PyMuPDF), `Builder.draw()`.**
+   - Header on every page ("DEMO BANK · TRADE SERVICES"); the title and instructions on page 1.
+   - Each section: a grey heading bar with its number, then its questions on a 12-column grid. Two short questions
+     share a row. A label sits beside its box when the whole row fits ("Name: [   ]"), otherwise above it. Tick boxes
+     have their follow-up questions indented under them. Short sections sit side by side (4 and 5, 6 and 7, ...).
+   - Each question: its number (e.g. **13.2**), its label, and a red `*` if it's always mandatory.
+   - The declaration block, with signature, date and company-stamp lines; then the QR code page; then the footers
+     on every page ("Form LC-01 · v1.0 · Nov 2026", "< Previous page" / "Next page >", "Page n of 4").
+   - While drawing, it notes where every box goes. The boxes themselves are made in step 3.
+2. **Describe the scripts and buttons, `Builder.checks()`.** It builds the rules table from `lc.py` and fills it into
+   `js/rules.js`. Then it adds `js/payload.js` and `js/qr.js`, and notes when each script runs. It also places the
+   Check form and Reset form buttons on every page, the 177 QR code rows, and the Generate QR Code and Print Form
+   buttons.
+3. **Write the PDF (pikepdf), `Builder.write()`.** It makes every field with its look (border, background, tick,
+   radio dot), tooltip, limits and starting answer. It adds the page links and stores the scripts, plus the form
+   description (JSON, under `/FormTemplate`) for the bank's workbench to read.
 
-The layout runs twice. The second pass gives the room left on the last page to the paragraph boxes on that page, so
-the form doesn't end with a blank gap.
+The layout runs twice. The second pass gives the room left on the last page of questions to the paragraph boxes on
+that page, so the form doesn't end with a blank gap.
 
 ## Rules, conditions and validations
 
@@ -307,17 +327,16 @@ applies then, but stays optional.
 
 ## The JavaScript inside the PDF
 
-Everything lives in one document-level script, named `lcRules` and stored as a stream. It defines these functions:
+Everything is stored in one document-level script, named `lcRules`. It's built from `js/rules.js`, `js/payload.js`
+and `js/qr.js`, and defines these functions:
 
-- `lcRules(doc)`: the rules engine. It holds a table `M` of every question that has a rule, a format or a lock.
-  On each run it works out, for every question, whether it applies, whether it's mandatory now, and whether its
-  answer is blank or wrong. It then sets the box's outline, fill, required flag and lock. It returns the list of
+- `lcRules(doc)` (`rules.js`): the rules engine. It holds a table `M` of every question that has a rule, a format or
+  a lock. On each run it works out, for every question, whether it applies, whether it's mandatory now, and whether
+  its answer is blank or wrong. It then sets the box's outline, fill, required flag and lock. It returns the list of
   missing questions, plus `.bad` (wrong answers) and `.first` (the first problem, for the cursor).
-- `lcDates(doc)`: in Acrobat, shows each date's calendar box and hides its drop-down list.
-- `lcPayload(doc)`: builds the QR code text (see below).
-- `lcQrMatrix(text)` and `lcDrawQr(doc, text)`: a QR encoder (version 40, error correction M). It draws the code
-  into 177 read-only comb text fields `__qr_0` ... `__qr_176`, using the ZapfDingbats black square character. So it
-  doesn't need Acrobat's barcode feature.
+- `lcDates(doc)` (`rules.js`): in Acrobat, shows each date's calendar box and hides its drop-down list.
+- `lcPayload(doc)` (`payload.js`): builds the QR code text.
+- `lcQrMatrix(text)` and `lcDrawQr(doc, text)` (`qr.js`): the QR code (see below).
 
 When `lcRules` runs:
 
@@ -334,55 +353,78 @@ The buttons:
 
 - **Check form** lists what's missing or wrong (at most 15 of each) and puts the cursor on the first problem. If
   nothing is wrong, it says the form is ready.
-- **Reset form** asks first, then clears everything back to the defaults and re-runs the checks.
-- **Generate QR Code** is refused while anything is missing or wrong. Otherwise it fills hidden field `__qr` with
-  the JSON payload, draws the code, and goes to the last page.
+- **Reset form** asks first, then clears everything back to the starting answers and re-runs the checks.
+- **Generate QR Code** is refused while anything is missing or wrong. Otherwise it makes the code and goes to the
+  last page.
 - **Print Form** is refused until a QR code exists and still matches the current answers. Then it prints.
 
-The QR code holds this JSON, padded with spaces to 2,300 characters so the code is always the same size:
+With JavaScript off, none of this runs. The form still fills, the date lists and page links work, and the mandatory
+boxes keep their red outline. Nothing is checked, though.
 
-```json
-{"form": "LC-01", "version": "1.0", "saved": "2026-11-12T16:30", "complete": true,
- "data": {"applicant_name": "TAN ENGINEERING PTE LTD", "tolerance": true, "bencert_sent_by": ["faxed"], "...": "..."}}
-```
+## How the QR code is made
 
-`data` holds only answered questions, keyed by field id. Tick boxes become `true`, and tick-any questions become
-lists. If the JSON would be too long, Goods description and then Additional conditions are shortened, ending in
-"...", and listed in `"truncated"`. The full text stays in the PDF's fields.
+The code is made **inside the PDF, in Acrobat**, when the person presses Generate QR Code. It isn't made by Python,
+and no QR library is used.
 
-With JavaScript off, none of the above runs. The form still fills, the date lists and page links work, and the
-mandatory boxes keep their red outline. Nothing is checked, though.
+1. **The text: `lcPayload` (`js/payload.js`).** It gathers every answered question, keyed by field id. Tick boxes
+   become `true`, and tick-any questions become lists:
+   ```json
+   {"form": "LC-01", "version": "1.0", "saved": "2026-11-12T16:30", "complete": true,
+    "data": {"applicant_name": "TAN ENGINEERING PTE LTD", "tolerance": true, "bencert_sent_by": ["faxed"], "...": "..."}}
+   ```
+   - The JSON is padded with spaces to 2,300 characters, so the code is always the same size.
+   - If it would be longer, Goods description and then Additional conditions are shortened (ending in "...") and
+     listed in `"truncated"`. The full text stays in the PDF's fields.
+2. **The code: `lcQrMatrix` (`js/qr.js`).** A standard QR encoder, about 70 lines.
+   - It makes a version 40 code (177 × 177 squares), with error correction level M, byte mode and mask 0.
+   - It places the fixed patterns (finders, timing, alignment, format and version bits).
+   - It adds Reed-Solomon error correction: 49 blocks, 28 correction bytes each.
+3. **The drawing: `lcDrawQr` (`js/qr.js`).** Acrobat scripts can't draw pixels, and Acrobat's own barcode field is
+   missing in some installations. So the QR page has **177 read-only text fields, one per row of the code**, each
+   with 177 fixed character slots. Each dark square is the letter "n" in the ZapfDingbats font, which prints as a
+   solid black square. Each row is set as a string, for example `"nnn n  nn…"`.
+4. **Print Form** prints only if the code still matches the current answers.
+
+The bank scans the printed code with any QR reader and gets the JSON.
+
+## Testing in Acrobat
+
+`check.py` checks the PDF's structure: every question's fields, the required flags, limits, starting answers, the
+rules table, scripts, buttons and QR rows. The scripts themselves only run inside Acrobat, so after changing a rule
+or a script, also test the PDF in Acrobat:
+1. On opening, the mandatory boxes are red.
+2. Fill a few boxes: each turns black. Empty one again: it turns red.
+3. Tick 13.1 Drafts: 13.2 and 13.3 unlock and turn red. Untick it: they lock, grey out and clear.
+4. Type letters into 8.2 Amount: they're refused.
+5. Press Check form: it lists what's missing.
+6. Fill everything, then press Generate QR Code: the code appears on page 4. Scan it with a phone and the JSON shows.
 
 ## Changing the form
 
-Edit `src/lc.ts`. Each question is one line. For example:
+Edit `lc.py`. Each question is one line. For example:
 
-```ts
-text("term_days", "Term: days", { requiredIf: when("drafts_at", "Term"), format: "number" }),
+```python
+text("term_days", "Term: days", requiredIf=when("drafts_at", "Term"), format="number"),
 ```
 
 This line makes a half-width text box named `term_days`, labelled "Term: days". It's mandatory (and unlocked) only
-when Drafts at = Term, and it takes digits only. The other options:
-`...req` (always mandatory), `requiredIf: ticked("x")`, `activeIf: ticked("x")` (applies only when x is ticked, but
-optional), `max: 35`, `format: "amount" | "number" | "phone" | "account"`, `half: false` (full width), and
-`beside: 69.3` (label beside a box this wide, even when the label is long; used only by 13.2).
-The layout, numbering, scripts and QR payload all follow from these lines. Then run `npm run build && npm test`.
-`check.ts` expects 4 pages and 297 fields, so update those numbers if you add or remove questions.
+when Drafts at = Term, and it takes digits only. All the options are listed at the top of `lc.py`. The layout,
+numbering, scripts and QR code all follow from these lines. Then run `python build_lc.py` and `python check.py`. If
+you add or remove questions, update the field count (297) in `check.py`.
 
 ## Where this came from
 
-This code was extracted from `pdf-template-studio` at commit `ce54788` (10 Nov 2026, "LC: editable drafts
-percentage"). It keeps only the 10 source files (of 112) that build this PDF, and one dependency instead of seven.
-The code is unchanged, apart from two things: imports now end in `.ts` so Node runs them directly, and the unused
-"uploaded PDF" branch was removed. With the clock frozen to the same time, this project's output is **byte-for-byte
-identical** to the original repo's `LC-Application-JavaScript.pdf` at that commit. (Without a frozen clock, the
-creation date and the range of the date lists change with the build date.)
-
-**After that, the layout was changed to match the approved 4-page copy (`test form - Copy.pdf`).** At `ce54788`, 13.2
-had its label above its box, which pushed the declaration onto a fourth page of questions. Now 13.2 sits beside its
-box (`beside` in `src/lc.ts` and `src/form/build.ts`, marked `ponytail:`), and the Drafts box ends 3 pt higher.
-Every field's page and position now matches the copy to within 0.1 pt, and so does every line of text on all
-4 pages. The copy has some defects that were deliberately **not** copied:
-- Its section 14 box on page 2 runs down through the footer.
-- It has no warning before save or print, and no pop-up for a wrong format.
-- Its stored `/FormTemplate` is out of date (no 13.2).
+1. **Extracted from `pdf-template-studio`.** The builder is that repo's `pdfbuild/build_form.py`, cut down to this one
+   form and the JavaScript version only: about 1,040 lines down to 880. The red frames used by the no-JavaScript
+   version, the extra modes, and the command-line and one-file-builder options are gone. Before any other change,
+   its output matched the full builder's (pages, words, every field and widget, scripts).
+2. **Layout changed to match the approved 4-page copy (`test form - Copy.pdf`).** 13.2 now sits beside its box, and the
+   Drafts box ends 3 pt higher (`beside` in `lc.py`; `BESIDE_GAP` and the Drafts-box line in `build_lc.py`, marked `ponytail:`). Every
+   field's page and position matches the copy to within 0.1 pt, and so does every line of text on all 4 pages. These
+   defects in the copy were deliberately **not** copied:
+   - Its section 14 box on page 2 runs down through the footer.
+   - It has no warning before save or print, and no pop-up for a wrong format.
+   - Its stored `/FormTemplate` is out of date (no 13.2).
+3. **Moved from TypeScript (pdf-lib) to Python (PyMuPDF + pikepdf).** The Python build gives the same PDF as the
+   earlier TypeScript build: same pages, text, fields, positions and scripts. The only pixel differences are how the
+   text inside boxes is smoothed ("Pick a date", ticks), and Acrobat redraws those boxes itself.
