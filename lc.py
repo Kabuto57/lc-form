@@ -16,7 +16,7 @@ Options:
     format="amount"                  amount / number / phone / account (see FORMATS in build_lc.py)
     half=False                       full width (text boxes are half width unless this is given)
     beside=69.3                      label beside a box this wide, even when the label is long (only 13.2)
-After a change:  python build_lc.py  then  python check.py
+After a change:  python build_lc.py   (builds the PDF, checks it, and refreshes the tables in README.md)
 """
 
 

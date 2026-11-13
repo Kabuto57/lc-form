@@ -5,7 +5,7 @@
 //   doesn't apply yet               -> greyed out, locked, and its answer cleared
 // It returns the list of missing questions, plus .bad (wrong answers) and .first (where to put the cursor).
 // lcDates(doc) shows each date's calendar box and hides its drop-down list (Acrobat only).
-// __MODEL__ is filled in by lcbuild/scripts.py with the rules table built from lc.py; __DATES__ with the date
+// __MODEL__ is filled in by build_lc.py (step 2, document_script) with the rules table built from lc.py; __DATES__ with the date
 // question ids. Acrobat's JavaScript is old-style: var, no arrow functions.
 function lcRules(d) {
 var M = __MODEL__;
@@ -112,7 +112,7 @@ if (typeof app != "undefined" && /^(Exchange|Reader)/.test(app.viewerType)) { lc
 //   {"form": "LC-01", "version": "1.0", "saved": "...", "complete": true, "data": {field id: answer, ...}}
 // Tick boxes become true; "tick any" questions become lists of the ticked options. The text is padded with spaces
 // to 2,300 characters so the code is always the same size. __GROUPS__, __LONG__, __FORM__ and __VERSION__ are
-// filled in by lcbuild/scripts.py.
+// filled in by build_lc.py (step 2, document_script).
 function lcPayload(d) {
 var G = {__GROUPS__}, LONG = __LONG__, CAP = 2300;
 var data = {}, i, n, f, k, v, g, m, out, cut = [], ok = true, t = new Date();

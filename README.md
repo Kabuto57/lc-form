@@ -132,8 +132,9 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `b
 - **What's in the PDF:** JavaScript (the files in `js/`) that runs in each user's Acrobat. This is the same whatever
   builds the PDF, and it's what the bank's IT policy on Acrobat JavaScript applies to. The scripts only read and
   write the form's own fields, show messages and print. They make no network calls and open no files.
-- **Upgrading:** to update the libraries, run `.venv/bin/pip install -U pikepdf`, then `.venv/bin/pip freeze >
-  requirements.txt`. Then rebuild (it checks itself), and test in Acrobat.
+- **Upgrading:** run `.venv/bin/pip list --outdated` to see newer versions, then change the version numbers in
+  `requirements.txt` by hand (keep its comments) and run `.venv/bin/pip install -r requirements.txt`. Then rebuild
+  (it checks itself), and test in Acrobat.
 
 ## How the PDF is built
 
@@ -531,3 +532,6 @@ you add or remove questions, update the field count (297) in `build_lc.py` secti
    local viewing page is written by the build. The PDF is byte-for-byte identical to before.
 7. **The README keeps itself up to date.** Every build rewrites the README's question tables, counts and starting
    answers from `lc.py`, so they can't drift from the form. The PDF is unchanged.
+8. **Libraries and stale notes updated.** pikepdf 10.18.0 to 10.18.1 (the other three were already the latest).
+   `requirements.txt` now says what each package is for and its licence. Notes in `lc.py` and `js/document.js` that
+   still named files removed in step 6 (`check.py`, `lcbuild/scripts.py`) now point to `build_lc.py`.
