@@ -6,67 +6,91 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 297 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and 177 QR rows.
 - Needs Python 3.9 or later and **one library, pikepdf**. All its licences are permissive (no GPL/AGPL).
+- **7 files.** One command builds the PDF and checks it.
 
 ## Run it
 
 ```
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python build_lc.py                       # writes out/LC-Application.pdf (and out/index.html)
-.venv/bin/python check.py                          # checks the PDF (prints PASS)
+.venv/bin/python build_lc.py                       # builds out/LC-Application.pdf, checks it, prints PASS
 .venv/bin/python -m http.server 8090 -d out        # serves it at http://localhost:8090 (Ctrl+C stops it)
 ```
 
 On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`.
 
+`build_lc.py` checks the PDF before saving it. If anything is wrong (a missing field, a broken rule, a damaged
+file), it stops with the reason and doesn't save a broken PDF.
+
 **Use Acrobat or Reader to test the form.** The browser's PDF viewer (Chrome, Edge) shows and fills the form, but it
 doesn't run most of the Acrobat JavaScript. So in a browser you won't get the red boxes, locking, Check form or the
 QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enable JavaScript or trust the file.
 
-## Files
+## Architecture
 
 ```
-lc-form/
-├── lc.py                  THE FORM: every question, its options and rules (edit this)
-├── build_lc.py            Run this to build the PDF
-├── lcbuild/               The builder, one file per step
-│   ├── __init__.py        Overview of the build
-│   ├── build.py           Runs the three steps in order
-│   ├── layout.py          Step 1: lays out the pages (sections, questions, boxes, QR page, footers)
-│   ├── scripts.py         Step 2: adds the Acrobat JavaScript, the buttons and the QR code rows
-│   ├── writer.py          Step 3: writes the PDF with pikepdf
-│   ├── style.py           Page size, colours, sizes, answer formats
-│   ├── text.py            Making text safe for the PDF fonts; measuring and wrapping it
-│   └── rules.py           "Is this mandatory now?", "does it apply now?", the date list
-├── js/                    The JavaScript that runs inside the PDF in Acrobat
-│   ├── rules.js           The rules engine: red boxes, locking, format and cross-checks
-│   ├── payload.js         The QR code's text (the answers as JSON)
-│   ├── qr.js              The QR code encoder, and drawing the code
-│   ├── check-form.js      "Check form" button
-│   ├── reset-form.js      "Reset form" button
-│   ├── generate-qr.js     "Generate QR Code" button
-│   ├── print-form.js      "Print Form" button
-│   └── before-save.js     Warning before saving or printing an incomplete form
-├── check.py               Checks the built PDF (prints PASS)
-├── helvetica-metrics.json Adobe's Helvetica letter widths, so text is measured exactly as Acrobat draws it
-├── index.html             The page shown by the local web server
-└── requirements.txt       pikepdf and its three dependencies, at exact versions
+                 ┌──────────────────────────────────────────────────────────────┐
+  lc.py          │ THE FORM: 108 questions, their options and rules             │  ← you edit this
+                 └──────────────────────────────┬───────────────────────────────┘
+                                                ▼
+                 ┌──────────────────────────────────────────────────────────────┐
+  build_lc.py    │ STEP 1  Lay out the pages                                    │
+                 │         sections, questions, boxes, QR page, footers         │
+                 │ STEP 2  Add the scripts (from js/), buttons, QR code rows    │
+                 │ STEP 3  Write the PDF with pikepdf                           │
+                 │ CHECK   Open the result, check it question by question       │
+                 └──────────────────────────────┬───────────────────────────────┘
+                                                ▼
+                 ┌──────────────────────────────────────────────────────────────┐
+  out/           │ LC-Application.pdf   the finished form (4 pages)             │
+                 │ index.html           a page to view it locally               │
+                 └──────────────────────────────┬───────────────────────────────┘
+                                                ▼  opened in Adobe Acrobat / Reader
+                 ┌──────────────────────────────────────────────────────────────┐
+  js/            │ document.js  rules engine (red boxes, locking, checks),      │
+  (stored inside │              QR code text, QR code encoder                   │
+   the PDF)      │ buttons.js   Check form, Reset form, Generate QR Code,       │
+                 │              Print Form, warning before save / print         │
+                 └──────────────────────────────────────────────────────────────┘
 ```
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `lc.py` | **The form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list and the starting answers. The only file you need to change for wording or rules. |
+| `build_lc.py` | **The builder.** Lays out the pages, adds the scripts and buttons, writes the PDF, then checks it. One file in numbered sections, with a contents list at the top (see below). |
+| `js/document.js` | **The rules engine**, run by Acrobat inside the PDF: colours boxes red or black, locks questions that don't apply, checks formats and dates. Also makes the QR code's text and draws the code. |
+| `js/buttons.js` | **The buttons**, run by Acrobat: Check form, Reset form, Generate QR Code, Print Form, and the warning before saving or printing. One section per button. |
+| `helvetica-metrics.json` | Data: Adobe's letter widths for Helvetica, so text is measured exactly as Acrobat draws it. Never changes. |
+| `requirements.txt` | The one library (pikepdf) and its three dependencies, at exact versions. |
+| `README.md` | This guide. |
+
+**Inside `build_lc.py`:**
+
+| Section | What it does | Change it to... |
+|---|---|---|
+| 1. Settings | Page size, colours, text sizes, spacing, answer formats | Change the look or the formats |
+| 2. Text helpers | Safe characters for the PDF fonts, measuring and wrapping text | (rarely) |
+| 3. Rules and dates | "Is this question mandatory now?", "does it apply now?", the date list | (rarely) |
+| 4. Step 1: lay out the pages | Where every section, question and box goes | Change how questions are arranged |
+| 5. Step 2: scripts, buttons, QR rows | Builds the rules table, attaches the scripts, places the buttons | Add or move a button |
+| 6. Step 3: write the PDF | Turns everything into PDF objects with pikepdf | (rarely) |
+| 7. Build | Runs the three steps | (rarely) |
+| 8. Self-check | Opens the built PDF and checks it | Update the field count if you add or remove questions |
+| 9. Run | Builds, checks, saves | (rarely) |
 
 **Where to change what:**
 
 | You want to change | Edit |
 |---|---|
 | A question's wording, options, mandatory rule, max length or format | `lc.py` |
-| Add or remove a question | `lc.py` (then update the field count, 297, in `check.py`) |
-| Colours, text sizes, spacing, page margins | `lcbuild/style.py` |
-| The answer formats (amount, phone, account, number) | `lcbuild/style.py` (`FORMATS`) |
-| How sections and questions are arranged | `lcbuild/layout.py` |
-| How the form checks answers in Acrobat | `js/rules.js` |
-| What the QR code holds | `js/payload.js` |
-| What a button says or does | the button's file in `js/` |
-
-Every file starts with a plain-English explanation of what it does, and the code is commented throughout.
+| Add or remove a question | `lc.py`, then the field count (297) in `build_lc.py` section 8 |
+| Colours, text sizes, spacing, margins, answer formats | `build_lc.py` section 1 |
+| How sections and questions are arranged | `build_lc.py` section 4 |
+| How the form checks answers in Acrobat | `js/document.js` |
+| What the QR code holds | `js/document.js` (`lcPayload`) |
+| What a button says or does | its section in `js/buttons.js` |
 
 ## Libraries and licences
 
@@ -80,12 +104,12 @@ Every file starts with a plain-English explanation of what it does, and the code
 
 All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
 your own code. MPL-2.0 only asks that changes to *pikepdf's own files* be shared, and this project doesn't change them.
-There's no QR library: the QR code is made inside the PDF, by `js/qr.js`, when the person presses Generate QR Code.
+There's no QR library: the QR code is made inside the PDF, by `js/document.js`, when the person presses Generate QR Code.
 
 **Why not PyMuPDF or pdf-lib?** Earlier versions used them. PyMuPDF is AGPL-3.0, a licence banks usually avoid, and its
 2.x release installs about a dozen extra AI packages (onnxruntime, numpy, ...). pdf-lib (JavaScript) is MIT but hasn't
 had a release since 2021, so security fixes won't come. pikepdf is permissive, actively maintained, and enough on
-its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `lcbuild/layout.py`).
+its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `build_lc.py` section 4).
 
 ## Security
 
@@ -99,13 +123,13 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `l
   builds the PDF, and it's what the bank's IT policy on Acrobat JavaScript applies to. The scripts only read and
   write the form's own fields, show messages and print. They make no network calls and open no files.
 - **Upgrading:** to update the libraries, run `.venv/bin/pip install -U pikepdf`, then `.venv/bin/pip freeze >
-  requirements.txt`. Then rebuild, run `check.py`, and test in Acrobat.
+  requirements.txt`. Then rebuild (it checks itself), and test in Acrobat.
 
 ## How the PDF is built
 
-`python build_lc.py` reads the form from `lc.py` and runs three steps (`lcbuild/build.py`):
+`python build_lc.py` reads the form from `lc.py`, runs three steps, then checks the result:
 
-1. **Lay out the pages (`lcbuild/layout.py`).** Decides where everything goes, and writes each page's text, lines
+1. **Lay out the pages (section 4).** Decides where everything goes, and writes each page's text, lines
    and boxes as PDF drawing commands.
    - Header on every page ("DEMO BANK · TRADE SERVICES"); the title and instructions on page 1.
    - Each section: a grey heading band with its number, then its questions on a 12-column grid. Short questions
@@ -115,11 +139,11 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `l
    - The declaration block (signature, date and company-stamp lines), the QR code page, and the footers on every
      page ("Form LC-01 · v1.0 · Nov 2026", "< Previous page" / "Next page >", "Page n of 4").
    - It also records every fillable box (text box, tick box, drop-down ...) and where it goes. Step 3 makes them.
-2. **Add the scripts and buttons (`lcbuild/scripts.py`).** Builds the rules table from `lc.py` and fills it into
-   `js/rules.js`, adds `js/payload.js` and `js/qr.js`, and says when the rules run (on a click, and on leaving a
+2. **Add the scripts and buttons (section 5).** Builds the rules table from `lc.py` and fills it into
+   `js/document.js`, and says when the rules run (on a click, and on leaving a
    box). Adds the Check form and Reset form buttons on every page, the 177 QR code rows, and the Generate QR Code
    and Print Form buttons.
-3. **Write the PDF (`lcbuild/writer.py`, with pikepdf).** Makes every field with its settings and its look (border,
+3. **Write the PDF (section 6, with pikepdf).** Makes every field with its settings and its look (border,
    background, tick, radio dot), the page links, the stored scripts, and a copy of the form's description (JSON)
    for the bank's workbench to read.
 
@@ -376,16 +400,16 @@ applies then, but stays optional.
 
 ## The JavaScript inside the PDF
 
-Everything is stored in one document-level script, named `lcRules`. It's built from `js/rules.js`, `js/payload.js`
-and `js/qr.js`, and defines these functions:
+Everything is stored in one document-level script, named `lcRules`, built from `js/document.js`. It defines these
+functions:
 
-- `lcRules(doc)` (`rules.js`): the rules engine. It holds a table `M` of every question that has a rule, a format or
+- `lcRules(doc)`: the rules engine. It holds a table `M` of every question that has a rule, a format or
   a lock. On each run it works out, for every question, whether it applies, whether it's mandatory now, and whether
   its answer is blank or wrong. It then sets the box's outline, fill, required flag and lock. It returns the list of
   missing questions, plus `.bad` (wrong answers) and `.first` (the first problem, for the cursor).
-- `lcDates(doc)` (`rules.js`): in Acrobat, shows each date's calendar box and hides its drop-down list.
-- `lcPayload(doc)` (`payload.js`): builds the QR code text.
-- `lcQrMatrix(text)` and `lcDrawQr(doc, text)` (`qr.js`): the QR code (see below).
+- `lcDates(doc)`: in Acrobat, shows each date's calendar box and hides its drop-down list.
+- `lcPayload(doc)`: builds the QR code text.
+- `lcQrMatrix(text)` and `lcDrawQr(doc, text)`: the QR code (see below).
 
 When `lcRules` runs:
 
@@ -398,7 +422,7 @@ When `lcRules` runs:
 | Check form, Generate QR Code, Print Form | button actions |
 | Before save or print | catalog `/AA /WS` and `/WP`: warns if the form is incomplete (but doesn't block) |
 
-The buttons:
+The buttons (`js/buttons.js`):
 
 - **Check form** lists what's missing or wrong (at most 15 of each) and puts the cursor on the first problem. If
   nothing is wrong, it says the form is ready.
@@ -415,7 +439,7 @@ boxes keep their red outline. Nothing is checked, though.
 The code is made **inside the PDF, in Acrobat**, when the person presses Generate QR Code. It isn't made by Python,
 and no QR library is used.
 
-1. **The text: `lcPayload` (`js/payload.js`).** It gathers every answered question, keyed by field id. Tick boxes
+1. **The text: `lcPayload` (`js/document.js`).** It gathers every answered question, keyed by field id. Tick boxes
    become `true`, and tick-any questions become lists:
    ```json
    {"form": "LC-01", "version": "1.0", "saved": "2026-11-12T16:30", "complete": true,
@@ -424,11 +448,11 @@ and no QR library is used.
    - The JSON is padded with spaces to 2,300 characters, so the code is always the same size.
    - If it would be longer, Goods description and then Additional conditions are shortened (ending in "...") and
      listed in `"truncated"`. The full text stays in the PDF's fields.
-2. **The code: `lcQrMatrix` (`js/qr.js`).** A standard QR encoder, about 70 lines.
+2. **The code: `lcQrMatrix` (`js/document.js`).** A standard QR encoder, about 70 lines.
    - It makes a version 40 code (177 × 177 squares), with error correction level M, byte mode and mask 0.
    - It places the fixed patterns (finders, timing, alignment, format and version bits).
    - It adds Reed-Solomon error correction: 49 blocks, 28 correction bytes each.
-3. **The drawing: `lcDrawQr` (`js/qr.js`).** Acrobat scripts can't draw pixels, and Acrobat's own barcode field is
+3. **The drawing: `lcDrawQr` (`js/document.js`).** Acrobat scripts can't draw pixels, and Acrobat's own barcode field is
    missing in some installations. So the QR page has **177 read-only text fields, one per row of the code**, each
    with 177 fixed character slots. Each dark square is the letter "n" in the ZapfDingbats font, which prints as a
    solid black square. Each row is set as a string, for example `"nnn n  nn…"`.
@@ -438,8 +462,8 @@ The bank scans the printed code with any QR reader and gets the JSON.
 
 ## Testing in Acrobat
 
-`check.py` checks the PDF's structure: every question's fields, the required flags, limits, starting answers, the
-rules table, scripts, buttons and QR rows. The scripts themselves only run inside Acrobat, so after changing a rule
+Every build checks the PDF's structure itself: every question's fields, the required flags, limits, starting
+answers, the rules table, scripts, buttons and QR rows. The scripts themselves only run inside Acrobat, so after changing a rule
 or a script, also test the PDF in Acrobat:
 1. On opening, the mandatory boxes are red.
 2. Fill a few boxes: each turns black. Empty one again: it turns red.
@@ -458,8 +482,8 @@ text("term_days", "Term: days", requiredIf=when("drafts_at", "Term"), format="nu
 
 This line makes a half-width text box named `term_days`, labelled "Term: days". It's mandatory (and unlocked) only
 when Drafts at = Term, and it takes digits only. All the options are listed at the top of `lc.py`. The layout,
-numbering, scripts and QR code all follow from these lines. Then run `python build_lc.py` and `python check.py`. If
-you add or remove questions, update the field count (297) in `check.py`.
+numbering, scripts and QR code all follow from these lines. Then run `python build_lc.py` (it checks itself). If
+you add or remove questions, update the field count (297) in `build_lc.py` section 8.
 
 ## Where this came from
 
@@ -468,7 +492,7 @@ you add or remove questions, update the field count (297) in `check.py`.
    version, the extra modes, and the command-line and one-file-builder options are gone. Before any other change,
    its output matched the full builder's (pages, words, every field and widget, scripts).
 2. **Layout changed to match the approved 4-page copy (`test form - Copy.pdf`).** 13.2 now sits beside its box, and the
-   Drafts box ends 3 pt higher (`beside` in `lc.py`; `BESIDE_GAP` in `lcbuild/style.py`). Every
+   Drafts box ends 3 pt higher (`beside` in `lc.py`; `BESIDE_GAP` in `build_lc.py` section 1). Every
    field's page and position matches the copy to within 0.1 pt, and so does every line of text on all 4 pages. These
    defects in the copy were deliberately **not** copied:
    - Its section 14 box on page 2 runs down through the footer.
@@ -479,6 +503,8 @@ you add or remove questions, update the field count (297) in `check.py`.
    text inside boxes is smoothed ("Pick a date", ticks), and Acrobat redraws those boxes itself.
 4. **PyMuPDF removed (licence and dependencies): pikepdf only.** The page drawing is now written directly as PDF
    commands. All 4 rendered pages are pixel-identical to the PyMuPDF build.
-5. **Restructured for readability.** The single 880-line builder became the `lcbuild/` package (one file per step,
-   with plain-English explanations and clearer names), and every script in `js/` got a header explaining what it
-   does. The PDF is byte-for-byte identical to before, apart from those script comments.
+5. **Restructured for readability.** Plain-English explanations and clearer names throughout, and a header on every
+   script. The PDF is byte-for-byte identical to before, apart from those script comments.
+6. **Fewer files: 23 down to 7.** The builder is one file again, now in numbered sections with a contents list. The
+   8 scripts are now 2 (`document.js`, `buttons.js`). The separate check runs automatically on every build, and the
+   local viewing page is written by the build. The PDF is byte-for-byte identical to before.
