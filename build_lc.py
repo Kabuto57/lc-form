@@ -11,6 +11,7 @@ HOW IT FITS TOGETHER
                    STEP 2  add the scripts ───── the rules engine, buttons and QR code rows
                    STEP 3  write the PDF ─────── pikepdf turns it all into a real PDF
                    CHECK   open the result and check it question by question
+                   DOCS    rewrite the README parts that come from lc.py (question tables, counts, defaults)
                         ▼
     out/LC-Application.pdf
                         │  inside the PDF, Acrobat runs:
@@ -26,7 +27,8 @@ CONTENTS OF THIS FILE
     6. Step 3: write the PDF                                     (class Writer)
     7. Build: run the three steps                                (build)
     8. Self-check: open the built PDF and check it               (self_check)
-    9. Run: build, check, save
+    9. Documentation: keep the README in step with lc.py          (update_readme)
+   10. Run: build, check, save, update the README
 
 The only library is pikepdf (MPL-2.0). Everything else is Python's standard library.
 """
@@ -37,10 +39,14 @@ import os
 import re
 import zlib
 
+import sys
+
 import pikepdf
 from pikepdf import Array, Dictionary, Name, String
 
-from lc import DEFAULTS, LC
+# Always read lc.py fresh: Python's compiled cache can miss an edit that keeps the file's size and timestamp second.
+sys.dont_write_bytecode = True
+from lc import CURRENCIES, DEFAULTS, LC  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -1243,7 +1249,92 @@ def self_check(pdf_bytes):
 
 
 # ====================================================================================================================
-# 9. RUN: BUILD, CHECK, SAVE
+# 9. DOCUMENTATION: KEEP THE README IN STEP WITH lc.py
+# ====================================================================================================================
+# The README's question tables, counts and starting answers come straight from lc.py, so every build rewrites them.
+# They sit between invisible markers in README.md:  <!-- AUTO:name ... -->  ...  <!-- /AUTO:name -->
+# Everything else in the README is written by hand.
+
+KIND_NAMES = {"text": "text", "long": "paragraph", "date": "date", "radio": "pick one", "checks": "tick any",
+              "check": "tick box", "select": "drop-down"}
+
+
+def question_numbers(form):
+    return {q["id"]: f"{si + 1}.{qi + 1}" for si, s in enumerate(form["sections"]) for qi, q in enumerate(s["fields"])}
+
+
+def rule_text(rule, form, numbers):
+    """A rule in words: "13.1 is ticked", "13.3 = "Term"", "10.3 is picked"."""
+    kinds = {q["id"]: q["kind"] for s in form["sections"] for q in s["fields"]}
+    n = numbers[rule["field"]]
+    if kinds[rule["field"]] == "check":
+        return f"{n} is ticked"
+    if rule.get("not"):
+        return f"{n} is picked"
+    return f"{n} = " + " or ".join(f'"{v}"' for v in rule["values"])
+
+
+def question_tables(form, currencies):
+    """One table per section: number, field name, question, type and options, when mandatory, max length, format."""
+    numbers = question_numbers(form)
+    short = lambda text: text if len(text) <= 70 else text[:67] + "..."
+    out = []
+    for si, section in enumerate(form["sections"]):
+        out.append(f"**{si + 1}. {section['title']}**{' (bank use only)' if section.get('bankOnly') else ''}\n")
+        out.append("| No. | Field | Question | Type | Mandatory | Max | Format |\n|---|---|---|---|---|---|---|")
+        for q in section["fields"]:
+            options = q.get("options")
+            choices = "" if not options else ": ISO currency codes" if options == currencies else ": " + " / ".join(options)
+            unlocked = " or ".join(rule_text(r, form, numbers) for r in active_rules(q)) if q.get("activeIf") else ""
+            if q.get("required"):
+                mandatory = "**always**"
+            elif q.get("requiredIf"):
+                mandatory = "when " + " or ".join(rule_text(r, form, numbers) for r in q["requiredIf"])
+            else:
+                mandatory = f"no (unlocked when {unlocked})" if unlocked else "no"
+            out.append(f"| {numbers[q['id']]} | `{q['id']}` | {short(q['label'])} | {KIND_NAMES[q['kind']]}{choices} | "
+                       f"{mandatory} | {q.get('max', '')} | {q.get('format', '')} |")
+        out.append("")
+    return "\n".join(out).rstrip("\n")
+
+
+def defaults_text(form, defaults):
+    """The starting answers as a list: "- 2.1 Mode of advising: **Full Swift**"."""
+    numbers, by_id = question_numbers(form), {q["id"]: q for s in form["sections"] for q in s["fields"]}
+    short = lambda text: text if len(text) <= 60 else text[:57] + "..."
+    return "\n".join(f"- {numbers[k]} {short(by_id[k]['label'])}: **{'ticked' if v is True else v}**" for k, v in defaults.items())
+
+
+def update_readme(pdf_bytes, currencies):
+    """Rewrites the README's generated blocks. Returns the names of the blocks that changed."""
+    path = os.path.join(HERE, "README.md")
+    with open(path, encoding="utf-8") as f:
+        readme = f.read()
+    pdf = pikepdf.open(io.BytesIO(pdf_bytes))
+    question_count = sum(len(s["fields"]) for s in LC["sections"])
+    blocks = {
+        "summary": f"- {len(pdf.pages)} pages: {len(pdf.pages) - 1} pages of questions, plus the QR code page.\n"
+                   f"- {len(pdf.Root.AcroForm.Fields)} PDF fields: {question_count} questions, plus date lists, tick-any boxes, "
+                   f"buttons and 177 QR rows.",
+        "defaults": defaults_text(LC, DEFAULTS),
+        "questions": question_tables(LC, currencies),
+    }
+    changed = []
+    for name, text in blocks.items():
+        pattern = re.compile(rf"(<!-- AUTO:{name} [^>]*-->\n)(.*?)(\n<!-- /AUTO:{name} -->)", re.S)
+        match = pattern.search(readme)
+        assert match, f"README.md is missing the <!-- AUTO:{name} --> markers"
+        if match.group(2) != text:
+            readme = readme[:match.start(2)] + text + readme[match.end(2):]
+            changed.append(name)
+    if changed:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(readme)
+    return changed
+
+
+# ====================================================================================================================
+# 10. RUN: BUILD, CHECK, SAVE, UPDATE THE README
 # ====================================================================================================================
 # A small page for viewing the PDF locally:  python -m http.server 8090 -d out   ->  http://localhost:8090
 INDEX_HTML = """<!doctype html>
@@ -1267,3 +1358,5 @@ if __name__ == "__main__":
         f.write(INDEX_HTML)
     print("Wrote out/LC-Application.pdf")
     print(result)
+    changed = update_readme(pdf_bytes, CURRENCIES)
+    print("README.md: updated " + ", ".join(changed) if changed else "README.md: already up to date")

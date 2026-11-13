@@ -3,8 +3,11 @@
 This project builds one PDF: the **Irrevocable Documentary Credit Application** (Demo Bank, Form LC-01 · v1.0 · Nov 2026).
 It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It's built in **Python**.
 
+<!-- AUTO:summary (written by build_lc.py from lc.py; don't edit by hand) -->
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 297 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and 177 QR rows.
+<!-- /AUTO:summary -->
+
 - Needs Python 3.9 or later and **one library, pikepdf**. All its licences are permissive (no GPL/AGPL).
 - **7 files.** One command builds the PDF and checks it.
 
@@ -20,7 +23,12 @@ python3 -m venv .venv
 On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`.
 
 `build_lc.py` checks the PDF before saving it. If anything is wrong (a missing field, a broken rule, a damaged
-file), it stops with the reason and doesn't save a broken PDF.
+file), it stops with the reason and doesn't save a broken PDF. It then brings this README up to date (see below).
+
+**This README keeps itself up to date.** The parts that come straight from `lc.py` (the page and field counts, the
+starting answers, and the table of every question) are rewritten by every build. They sit between invisible
+`<!-- AUTO:... -->` markers, so don't edit those parts by hand: change `lc.py` and rebuild. Everything else is written
+by hand, and is updated whenever the project changes.
 
 **Use Acrobat or Reader to test the form.** The browser's PDF viewer (Chrome, Edge) shows and fills the form, but it
 doesn't run most of the Acrobat JavaScript. So in a browser you won't get the red boxes, locking, Check form or the
@@ -39,6 +47,7 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
                  │ STEP 2  Add the scripts (from js/), buttons, QR code rows    │
                  │ STEP 3  Write the PDF with pikepdf                           │
                  │ CHECK   Open the result, check it question by question       │
+                 │ DOCS    Rewrite this README's question tables and counts     │
                  └──────────────────────────────┬───────────────────────────────┘
                                                 ▼
                  ┌──────────────────────────────────────────────────────────────┐
@@ -59,7 +68,7 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
 | File | Purpose |
 |---|---|
 | `lc.py` | **The form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list and the starting answers. The only file you need to change for wording or rules. |
-| `build_lc.py` | **The builder.** Lays out the pages, adds the scripts and buttons, writes the PDF, then checks it. One file in numbered sections, with a contents list at the top (see below). |
+| `build_lc.py` | **The builder.** Lays out the pages, adds the scripts and buttons, writes the PDF, checks it, and updates this README. One file in numbered sections, with a contents list at the top (see below). |
 | `js/document.js` | **The rules engine**, run by Acrobat inside the PDF: colours boxes red or black, locks questions that don't apply, checks formats and dates. Also makes the QR code's text and draws the code. |
 | `js/buttons.js` | **The buttons**, run by Acrobat: Check form, Reset form, Generate QR Code, Print Form, and the warning before saving or printing. One section per button. |
 | `helvetica-metrics.json` | Data: Adobe's letter widths for Helvetica, so text is measured exactly as Acrobat draws it. Never changes. |
@@ -78,7 +87,8 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
 | 6. Step 3: write the PDF | Turns everything into PDF objects with pikepdf | (rarely) |
 | 7. Build | Runs the three steps | (rarely) |
 | 8. Self-check | Opens the built PDF and checks it | Update the field count if you add or remove questions |
-| 9. Run | Builds, checks, saves | (rarely) |
+| 9. Documentation | Rewrites this README's question tables, counts and starting answers from `lc.py` | Change how those tables look |
+| 10. Run | Builds, checks, saves, updates the README | (rarely) |
 
 **Where to change what:**
 
@@ -191,15 +201,24 @@ A wrong whole answer gets an alert when you leave the box, and the box refuses i
 
 ### Defaults when the form opens
 
-Mode of advising = Full Swift · Presentation period = 21 · 17.1 All bank charges ticked, with 17.2 = Beneficiary ·
-17.5 Post-shipment financing ticked · 17.11 Debit issuance charges ticked.
+<!-- AUTO:defaults (written by build_lc.py from lc.py; don't edit by hand) -->
+- 2.1 Mode of advising: **Full Swift**
+- 11.2 Presentation period (days after shipment): **21**
+- 17.1 All bank charges are for account of: **ticked**
+- 17.2 Charges for account of: **Beneficiary, except charges at DC Issuing Bank's counter**
+- 17.5 Please provide us with post-shipment financing under Docu...: **ticked**
+- 17.11 Please debit all DC issuance charges to our account with you: **ticked**
+<!-- /AUTO:defaults -->
 
 ### Every question
+
+(Written by the build from `lc.py`.)
 
 "Mandatory" says **always**, **when** a condition holds, or **no**. A question with a "when" condition is also locked
 until that condition holds, except for 10.4 and 10.7, which are never locked. "Unlocked when" means the question only
 applies then, but stays optional.
 
+<!-- AUTO:questions (written by build_lc.py from lc.py; don't edit by hand) -->
 **1. Application**
 
 | No. | Field | Question | Type | Mandatory | Max | Format |
@@ -397,6 +416,7 @@ applies then, but stays optional.
 | No. | Field | Question | Type | Mandatory | Max | Format |
 |---|---|---|---|---|---|---|
 | 18.1 | `authorised_person` | Name and title of authorised person(s) | text | no |  |  |
+<!-- /AUTO:questions -->
 
 ## The JavaScript inside the PDF
 
@@ -482,7 +502,8 @@ text("term_days", "Term: days", requiredIf=when("drafts_at", "Term"), format="nu
 
 This line makes a half-width text box named `term_days`, labelled "Term: days". It's mandatory (and unlocked) only
 when Drafts at = Term, and it takes digits only. All the options are listed at the top of `lc.py`. The layout,
-numbering, scripts and QR code all follow from these lines. Then run `python build_lc.py` (it checks itself). If
+numbering, scripts, QR code and this README's question table all follow from these lines. Then run
+`python build_lc.py` (it checks itself and updates the README). If
 you add or remove questions, update the field count (297) in `build_lc.py` section 8.
 
 ## Where this came from
@@ -508,3 +529,5 @@ you add or remove questions, update the field count (297) in `build_lc.py` secti
 6. **Fewer files: 23 down to 7.** The builder is one file again, now in numbered sections with a contents list. The
    8 scripts are now 2 (`document.js`, `buttons.js`). The separate check runs automatically on every build, and the
    local viewing page is written by the build. The PDF is byte-for-byte identical to before.
+7. **The README keeps itself up to date.** Every build rewrites the README's question tables, counts and starting
+   answers from `lc.py`, so they can't drift from the form. The PDF is unchanged.
