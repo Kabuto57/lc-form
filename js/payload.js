@@ -1,3 +1,8 @@
+// THE QR CODE'S TEXT. lcPayload(doc) returns every answered question as JSON:
+//   {"form": "LC-01", "version": "1.0", "saved": "...", "complete": true, "data": {field id: answer, ...}}
+// Tick boxes become true; "tick any" questions become lists of the ticked options. The text is padded with spaces
+// to 2,300 characters so the code is always the same size. __GROUPS__, __LONG__, __FORM__ and __VERSION__ are
+// filled in by lcbuild/scripts.py.
 function lcPayload(d) {
 var G = {__GROUPS__}, LONG = __LONG__, CAP = 2300;
 var data = {}, i, n, f, k, v, g, m, out, cut = [], ok = true, t = new Date();

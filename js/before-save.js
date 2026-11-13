@@ -1,3 +1,5 @@
+// BEFORE SAVING OR PRINTING: the same list as Check form, shown only if something is missing or wrong.
+// It warns but doesn't stop the save or print.
 var m = typeof lcRules == "function" ? lcRules(this) : [], b = m.bad || [], t = [];
 function list(a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
 if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));

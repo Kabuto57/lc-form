@@ -1,3 +1,12 @@
+// THE RULES ENGINE (runs inside Acrobat). Built into the PDF as the document script "lcRules".
+// lcRules(doc) checks every question and colours its box:
+//   blank or wrong mandatory answer -> red outline, pink fill, marked Required
+//   answered and right              -> black outline, white fill
+//   doesn't apply yet               -> greyed out, locked, and its answer cleared
+// It returns the list of missing questions, plus .bad (wrong answers) and .first (where to put the cursor).
+// lcDates(doc) shows each date's calendar box and hides its drop-down list (Acrobat only).
+// __MODEL__ is filled in by lcbuild/scripts.py with the rules table built from lc.py; __DATES__ with the date
+// question ids. Acrobat's JavaScript is old-style: var, no arrow functions.
 function lcRules(d) {
 var M = __MODEL__;
 function has(list, x) { for (var i = 0; i < list.length; i++) if (list[i] == x) return true; return false; }

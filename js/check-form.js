@@ -1,3 +1,5 @@
+// "CHECK FORM" BUTTON: lists what is missing or wrong (at most 15 of each) and puts the cursor on the first
+// problem; otherwise says the form is ready.
 var m = typeof lcRules == "function" ? lcRules(this) : [], b = m.bad || [], t = [];
 function list(a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
 if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));

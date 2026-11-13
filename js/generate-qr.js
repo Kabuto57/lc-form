@@ -1,3 +1,5 @@
+// "GENERATE QR CODE" BUTTON: refuses while anything is missing or wrong; otherwise makes the QR code from the
+// answers (lcPayload, lcDrawQr) and goes to the QR code page.
 var m = typeof lcRules == "function" ? lcRules(this) : [], b = m.bad || [], t = [];
 function list(a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
 if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));

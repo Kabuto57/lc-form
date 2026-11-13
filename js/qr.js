@@ -1,3 +1,7 @@
+// THE QR CODE ENCODER AND DRAWING (standard QR code, no library needed).
+// lcQrMatrix(text) returns the 177 x 177 grid of a version 40 QR code (true = dark square).
+// lcDrawQr(doc, text) writes each row into one of the read-only text boxes "__qr_0" ... "__qr_176" on the
+// QR page, as the letter "n" in the ZapfDingbats font (which prints as a black square) for each dark square.
 // QR code (version 40, error correction M, byte mode, mask 0) drawn without Acrobat's barcode feature:
 // one comb text field per row ("__qr_0" ... "__qr_176"), dark modules as ZapfDingbats "n" (a black square).
 function lcQrMatrix(text) {
