@@ -5,7 +5,7 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 
 <!-- AUTO:summary (written by build_form.py from lc.py; don't edit by hand) -->
 - 4 pages: 3 pages of questions, plus the QR code page.
-- 297 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and 177 QR rows.
+- 477 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and the rows of two QR codes (177 each).
 <!-- /AUTO:summary -->
 
 - Needs Python 3.9 or later and **one library, pikepdf**. All its licences are permissive (no GPL/AGPL).
@@ -166,7 +166,7 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `b
    - It also records every fillable box (text box, tick box, drop-down ...) and where it goes. Step 3 makes them.
 2. **Add the scripts and buttons (section 6).** Builds the rules table from `lc.py` and fills it into
    `DOCUMENT_JS`, and says when the rules run (on a click, and on leaving a
-   box). Adds the Check form and Reset form buttons on every page, the 177 QR code rows, and the Generate QR Code
+   box). Adds the Check form and Reset form buttons on every page, the rows of two QR codes (177 each), and the Generate QR Code
    and Print Form buttons.
 3. **Write the PDF (section 7, with pikepdf).** Makes every field with its settings and its look (border,
    background, tick, radio dot), the page links, the stored scripts, and a copy of the form's description (JSON)
@@ -461,9 +461,10 @@ The buttons (`BUTTON_JS`, Appendix A):
 
 - **Check form** lists what's missing or wrong (at most 15 of each) and puts the cursor on the first problem. If
   nothing is wrong, it says the form is ready.
-- **Reset form** asks first, then clears everything back to the starting answers and re-runs the checks.
-- **Generate QR Code** is refused while anything is missing or wrong. Otherwise it makes the code and goes to the
-  last page.
+- **Reset form** asks first, then clears everything back to the starting answers, removes the QR codes, and
+  re-runs the checks.
+- **Generate QR Code** is refused while anything is missing or wrong. Otherwise it makes the code (two codes if the
+  answers don't fit in one) and goes to the last page.
 - **Print Form** is refused until a QR code exists and still matches the current answers. Then it prints.
 
 With JavaScript off, none of this runs. The form still fills, the date lists and page links work, and the mandatory
@@ -474,26 +475,55 @@ boxes keep their red outline. Nothing is checked, though.
 The code is made **inside the PDF, in Acrobat**, when the person presses Generate QR Code. It isn't made by Python,
 and no QR library is used.
 
+**One code, or two when the answers don't fit.** One QR code holds 2,300 characters. Most applications fit, and get
+one code. When the answers are longer, a **second code appears under the first**, and the Bank scans both. The QR
+page always has room for two, one above the other, with the Generate QR Code and Print Form buttons at the bottom:
+
+```
+  APPLICATION QR CODE (FOR BANK USE)
+  instructions ...
+            QR code 1 of 2 (scan both codes)      <- label: only when there are two codes
+           ┌──────────────────────┐
+           │      QR code 1       │                   always used
+           └──────────────────────┘
+            QR code 2 of 2
+           ┌──────────────────────┐
+           │      QR code 2       │                   frame and code appear only when needed
+           └──────────────────────┘
+        [ Generate QR Code ]  [ Print Form ]
+```
+
+Each code is 111 mm square: 177 × 177 squares of 0.6 mm.
+
 1. **The text: `lcPayload` (`DOCUMENT_JS`).** It gathers every answered question, keyed by field id. Tick boxes
    become `true`, and tick-any questions become lists:
    ```json
    {"form": "LC-01", "version": "1.0", "saved": "2026-11-12T16:30", "complete": true,
     "data": {"applicant_name": "TAN ENGINEERING PTE LTD", "tolerance": true, "bencert_sent_by": ["faxed"], "...": "..."}}
    ```
-   - The JSON is padded with spaces to 2,300 characters, so the code is always the same size.
-   - If it would be longer, Goods description and then Additional conditions are shortened (ending in "...") and
-     listed in `"truncated"`. The full text stays in the PDF's fields.
-2. **The code: `lcQrMatrix` (`DOCUMENT_JS`).** A standard QR encoder, about 70 lines.
+   - The JSON is padded with spaces to 2,300 characters (one code), or to 4,600 when it needs two.
+   - Two codes hold 4,600 characters. Only if the answers are longer still are Goods description and then
+     Additional conditions shortened (ending in "...") and listed in `"truncated"`. The full text stays in the
+     PDF's fields.
+2. **Splitting: `lcDrawQr` (`DOCUMENT_JS`).** If the text is too long for one code (2,329 bytes), it is cut in half:
+   code 1 holds the first half, code 2 the second. Each code is marked with the QR standard's **structured append**
+   header ("code 1 of 2", "code 2 of 2", plus a check value of the whole text), so scanners that support it join
+   the two codes automatically. With any other scanner, scan code 1, then code 2, and put the two texts together in
+   that order: the result is exactly the JSON above. Text too long for two codes is refused with a message; a code
+   that can't be read is never drawn.
+3. **The code: `lcQrMatrix` (`DOCUMENT_JS`).** A standard QR encoder, about 70 lines.
    - It makes a version 40 code (177 × 177 squares), with error correction level M, byte mode and mask 0.
    - It places the fixed patterns (finders, timing, alignment, format and version bits).
    - It adds Reed-Solomon error correction: 49 blocks, 28 correction bytes each.
-3. **The drawing: `lcDrawQr` (`DOCUMENT_JS`).** Acrobat scripts can't draw pixels, and Acrobat's own barcode field is
-   missing in some installations. So the QR page has **177 read-only text fields, one per row of the code**, each
-   with 177 fixed character slots. Each dark square is the letter "n" in the ZapfDingbats font, which prints as a
-   solid black square. Each row is set as a string, for example `"nnn n  nn…"`.
-4. **Print Form** prints only if the code still matches the current answers.
+4. **The drawing: `lcDrawQr` (`DOCUMENT_JS`).** Acrobat scripts can't draw pixels, and Acrobat's own barcode field is
+   missing in some installations. So for each code the QR page has **177 read-only text fields, one per row of the
+   code** (`__qr1_0` ... `__qr1_176`, and `__qr2_0` ... `__qr2_176`), each with 177 fixed character slots. Each
+   dark square is the letter "n" in the ZapfDingbats font, which prints as a solid black square. Each row is set as
+   a string, for example `"nnn n  nn…"`. The second code's frame (`__qr2_frame`) and the labels (`__qr1_label`,
+   `__qr2_label`) are fields too, so they show only when there are two codes.
+5. **Print Form** prints only if the code (or codes) still match the current answers.
 
-The bank scans the printed code with any QR reader and gets the JSON.
+The bank scans the printed code (or both codes) with a QR reader and gets the JSON.
 
 ## Testing in Acrobat
 
@@ -506,6 +536,9 @@ or a script, also test the PDF in Acrobat:
 4. Type letters into 8.2 Amount: they're refused.
 5. Press Check form: it lists what's missing.
 6. Fill everything, then press Generate QR Code: the code appears on page 4. Scan it with a phone and the JSON shows.
+7. Paste a long text (about 2,000 characters) into Goods description and press Generate QR Code again: two codes
+   appear, labelled 1 of 2 and 2 of 2. Scan both; together they give the JSON. Shorten the text and generate again:
+   back to one code, and the second frame disappears. Test the two codes with the Bank's own scanner too.
 
 ## Changing the form
 
@@ -561,7 +594,7 @@ DEFAULTS = {"type": "Annual"}
 ```
 
 Every form gets the same features: red mandatory boxes, locking, Check form, Reset form, the QR code page and
-Print Form. (This example builds a 2-page PDF with 193 fields; most of them are the 177 rows of the QR code.)
+Print Form. (This example builds a 2-page PDF with 373 fields; 354 of them are the rows of the two QR codes.)
 
 ## Where this came from
 
@@ -598,3 +631,10 @@ Print Form. (This example builds a 2-page PDF with 193 fields; most of them are 
    longer has the LC form's field count written into it: it checks whatever the form file says, and the page count
    comes from `PAGES` in `lc.py`. The PDF is byte-for-byte identical to before apart from two script comments that
    named old files, all 26 script tests pass, and the QR code still scans.
+10. **Two QR codes when the answers don't fit in one.** Before, answers longer than one code (2,300 characters)
+    could make an unreadable code: shortening the two long paragraphs wasn't always enough. Now a second code
+    appears under the first only when needed (QR structured append, labelled "QR code 1 of 2" / "2 of 2"), and
+    text too long even for two codes is refused instead of drawn. The QR page now holds two 111 mm frames with the
+    buttons at the bottom; a single code is therefore smaller than before (111 mm instead of 159 mm). 477 fields
+    instead of 297. Tested: 34 script tests pass, and both codes scan (also from a rendered page) and join back
+    into the exact JSON.

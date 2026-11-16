@@ -813,19 +813,23 @@ class Layout:
             i += 2
 
     def draw_qr_page(self):
-        """A last page with a frame for the QR code of the answers (DOCUMENT_JS draws the code into it in Acrobat)."""
+        """A last page with room for two QR codes of the answers, one above the other, and the Generate QR Code and
+        Print Form buttons at the bottom. DOCUMENT_JS draws the codes in Acrobat: usually one code fills the first
+        frame; only when the answers are too long for one code does the second frame appear, with the rest."""
         self.new_page()
         self.text("APPLICATION QR CODE (FOR BANK USE)", M, H - 56, 11, True)
         y = H - 70
-        for line in wrap("When the form is filled in, press Generate QR Code (under the code), then Print Form. The Bank scans the code to read the application (all the answers, as JSON). Do not write on or fold the code.", 8, W - 2 * M):
+        for line in wrap("When the form is filled in, press Generate QR Code (at the bottom of this page), then Print Form. The Bank scans the code to read the application (all the answers, as JSON). If the answers are too long for one code, a second code appears under the first: the Bank scans both. Do not write on or fold the codes.", 8, W - 2 * M):
             self.text(line, M, y, 8, color=GREY)
             y -= 10
-        size = 450
-        self.qr = {"page": self.page.number, "x": (W - size) / 2, "y": y - 14 - size, "size": size,
-                   "button": ((W - 312) / 2, y - 14 - size - 52)}
-        self.rect(self.qr["x"], self.qr["y"], size, size, border=RULE, border_width=0.5)
-        code = safe(self.form.get("formCode") or self.form["title"])
-        self.text(code, (W - width(code, 7)) / 2, self.qr["y"] - 14, 7, color=GREY)
+        buttons_y = 46                                         # the buttons sit just above the footer line
+        label, gap = 12, 8                                     # room for "QR code 1 of 2" above each frame; gap between
+        size = int((y - 4 - (buttons_y + 30) - 2 * label - gap) / 2)   # two equal frames fill the rest of the page
+        x = (W - size) / 2
+        first_y = y - 4 - label - size
+        self.qr = {"page": self.page.number, "slots": [(x, first_y, size), (x, first_y - gap - label - size, size)],
+                   "button": ((W - 312) / 2, buttons_y)}
+        self.rect(x, first_y, size, size, border=RULE, border_width=0.5)   # the second frame is a field, shown when needed
 
     def draw_footers(self):
         """Every page: form code, "Page n of N", and "< Previous page" / "Next page >" links (plain PDF links, so
@@ -849,7 +853,7 @@ class Layout:
 #      into DOCUMENT_JS (the rules engine, the QR code's text and the QR encoder): the one document-level
 #      script stored in the PDF, named "lcRules".
 #   2. says when the rules run: when a tick box or option is clicked, and when the person leaves a box
-#   3. adds the hidden helper fields, the 177 QR code rows, and the buttons (Check form, Reset form on every page;
+#   3. adds the hidden helper fields, the rows of the two QR codes, and the buttons (Check form, Reset form on every page;
 #      Generate QR Code and Print Form on the QR page)
 # It only adds field descriptions to the layout; step 3 makes the PDF objects.
 
@@ -941,19 +945,28 @@ def add_scripts(layout):
     recalc = layout.add_field("__checks", "text", size=3, events={"C": RUN_RULES})
     layout.add_widget(recalc, -20, -20, 1, 1, hidden=True, border=INK, bg=WHITE)
 
-    # The QR code: a hidden field "__qr" holds the answers as JSON; DOCUMENT_JS draws the code into 177 read-only
+    # The QR codes: a hidden field "__qr" holds the answers as JSON; DOCUMENT_JS draws each code into 177 read-only
     # "comb" text boxes, one per row of the code (a comb box spaces its characters evenly). Each dark square is
     # the letter "n" in the ZapfDingbats font, which prints as a solid black square. This avoids Acrobat's own
     # barcode feature, which some installations don't have.
+    # There are two codes' worth of rows: "__qr1_0" ... "__qr1_176" and "__qr2_0" ... "__qr2_176". The second code,
+    # its frame ("__qr2_frame") and the labels ("__qr1_label", "__qr2_label") stay empty / hidden unless the
+    # answers are too long for one code.
     qr = layout.qr
     layout.page = layout.pages[qr["page"]]
     holder = layout.add_field("__qr", "text", size=3)
     layout.add_widget(holder, -20, -20, 1, 1, hidden=True, border=INK, bg=WHITE)
-    module = qr["size"] / 185   # 177 squares + 4 squares of white margin on each side
-    font_size = "/ZaDb %s Tf 0 g" % fmt(round(module / 0.692 * 1000) / 1000)   # the square is 0.692 of the font size
-    for y in range(177):
-        row = layout.add_field(f"__qr_{y}", "text", max=177, comb=True, appearance=font_size)
-        layout.add_widget(row, qr["x"] + 4 * module, qr["y"] + qr["size"] - (5 + y) * module, 177 * module, module)
+    for k, (x, y0, size) in enumerate(qr["slots"], 1):
+        label = layout.add_field(f"__qr{k}_label", "text", read_only=True, size=8)
+        layout.add_widget(label, x, y0 + size + 1, size, 10)
+        if k > 1:
+            frame = layout.add_field(f"__qr{k}_frame", "text", read_only=True)
+            layout.add_widget(frame, x, y0, size, size, hidden=True, border=RULE, border_width=0.5)
+        module = size / 185   # 177 squares + 4 squares of white margin on each side
+        font_size = "/ZaDb %s Tf 0 g" % fmt(round(module / 0.692 * 1000) / 1000)   # the square is 0.692 of the font size
+        for y in range(177):
+            row = layout.add_field(f"__qr{k}_{y}", "text", max=177, comb=True, appearance=font_size)
+            layout.add_widget(row, x + 4 * module, y0 + size - (5 + y) * module, 177 * module, module)
 
     # "Check form" and "Reset form" at the top right of every page (on screen only, never printed).
     buttons = [("__check_form", "Check form", script("check-form"), 64), ("__reset_form", "Reset form", script("reset-form"), 64)]
@@ -1091,6 +1104,8 @@ class Writer:
                 flags |= MULTILINE
             if field.get("comb"):
                 flags |= COMB | READ_ONLY
+            if field.get("read_only"):
+                flags |= READ_ONLY
             if field.get("max"):
                 d[Name.MaxLen] = field["max"]
             if field.get("value"):
@@ -1298,7 +1313,8 @@ def self_check(pdf_bytes, spec):
     for name in ("__check_form", "__reset_form", "__generate_qr", "__print_form", "__checks", "__qr"):
         assert name in fields, f"missing {name}"
     assert len(fields["__check_form"].Kids) == len(pdf.pages), "Check form should be on every page"
-    assert all(f"__qr_{y}" in fields for y in range(177)), "missing QR code rows"
+    assert all(f"__qr{k}_{y}" in fields for k in (1, 2) for y in range(177)), "missing QR code rows"
+    assert int(fields["__qr2_frame"].Kids[0].F) == 2, "the second QR frame should start hidden"
     assert "/WS" in pdf.Root.AA and "/WP" in pdf.Root.AA, "missing the warning before save / print"
     return f"PASS: {len(pdf.pages)} pages, {len(fields)} fields, rules table, scripts, buttons and QR rows OK"
 
@@ -1370,7 +1386,7 @@ def update_readme(path, pdf_bytes, spec):
     blocks = {
         "summary": f"- {len(pdf.pages)} pages: {len(pdf.pages) - 1} pages of questions, plus the QR code page.\n"
                    f"- {len(pdf.Root.AcroForm.Fields)} PDF fields: {question_count} questions, plus date lists, tick-any boxes, "
-                   f"buttons and 177 QR rows.",
+                   f"buttons and the rows of two QR codes (177 each).",
         "defaults": defaults_text(spec.FORM, spec.DEFAULTS),
         "questions": question_tables(spec.FORM),
     }
@@ -1565,9 +1581,10 @@ function lcDates(d) {
 if (typeof app != "undefined" && /^(Exchange|Reader)/.test(app.viewerType)) { lcDates(this); lcRules(this); }
 // THE QR CODE'S TEXT. lcPayload(doc) returns every answered question as JSON:
 //   {"form": "LC-01", "version": "1.0", "saved": "...", "complete": true, "data": {field id: answer, ...}}
-// Tick boxes become true; "tick any" questions become lists of the ticked options. The text is padded with spaces
-// to 2,300 characters so the code is always the same size. __GROUPS__, __LONG__, __FORM__ and __VERSION__ are
-// filled in by document_script (step 2).
+// Tick boxes become true; "tick any" questions become lists of the ticked options. One QR code holds 2,300
+// characters of it; longer answers take two codes (lcDrawQr splits the text). The text is padded with spaces to
+// 2,300 (or 4,600 for two codes). __GROUPS__, __LONG__, __FORM__ and __VERSION__ are filled in by document_script
+// (step 2).
 function lcPayload(d) {
 var G = {__GROUPS__}, LONG = __LONG__, CAP = 2300;
 var data = {}, i, n, f, k, v, g, m, out, cut = [], ok = true, t = new Date();
@@ -1583,25 +1600,25 @@ for (i = 0; i < d.numFields; i++) {
 if (typeof lcRules == "function") { m = lcRules(d); ok = !m.length && !(m.bad || []).length; }
 function pad(x) { return ("0" + x).slice(-2); }
 out = {"form": __FORM__, "version": __VERSION__, "saved": t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate()) + "T" + pad(t.getHours()) + ":" + pad(t.getMinutes()), "complete": ok, "data": data};
-// A QR code holds about 2,300 characters: if the answers are longer, shorten the two long paragraphs and say so.
-for (i = 0; i < LONG.length && JSON.stringify(out).length > CAP; i++) {
+// Two QR codes hold 4,600 characters: if the answers are longer still, shorten the two long paragraphs and say so.
+for (i = 0; i < LONG.length && JSON.stringify(out).length > 2 * CAP; i++) {
   k = LONG[i]; if (!data[k]) continue;
   cut.push(k); out.truncated = cut;
-  v = JSON.stringify(out).length - CAP + 3;
+  v = JSON.stringify(out).length - 2 * CAP + 3;
   data[k] = v < data[k].length ? data[k].slice(0, data[k].length - v) + "..." : "...";
 }
-// Padded with spaces to the full length: the QR code is then always the same size (version 40) and fills its frame.
-v = JSON.stringify(out); while (v.length < CAP) v += " ";
+// Padded with spaces to fill one code (2,300) or, when it doesn't fit in one, two codes (4,600).
+v = JSON.stringify(out); n = v.length > CAP ? 2 * CAP : CAP; while (v.length < n) v += " ";
 return v;
 }
 // THE QR CODE ENCODER AND DRAWING (standard QR code, no library needed).
-// lcQrMatrix(text) returns the 177 x 177 grid of a version 40 QR code (true = dark square).
-// lcDrawQr(doc, text) writes each row into one of the read-only text boxes "__qr_0" ... "__qr_176" on the
-// QR page, as the letter "n" in the ZapfDingbats font (which prints as a black square) for each dark square.
-// QR code (version 40, error correction M, byte mode, mask 0) drawn without Acrobat's barcode feature:
-// one comb text field per row ("__qr_0" ... "__qr_176"), dark modules as ZapfDingbats "n" (a black square).
-function lcQrMatrix(text) {
-  var N = 177, i, j, x, y, m = [], f = [], bytes = [], s = unescape(encodeURIComponent(text));
+// lcQrMatrix(bytes, part) returns the 177 x 177 grid of a version 40 QR code (true = dark square). bytes is the
+// text as UTF-8 bytes (one character per byte). part is null for a single code, or [index, total, parity] for
+// one of several codes ("structured append", part of the QR standard: each code says it is code 1 or 2 of 2,
+// so a scanner that supports it joins them; any other scanner reads each code's text, and the two texts are
+// joined in order). Version 40, error correction M, byte mode, mask 0; at most 2,329 bytes per code.
+function lcQrMatrix(s, part) {
+  var N = 177, i, j, x, y, m = [], f = [], bytes = [];
   for (i = 0; i < s.length; i++) bytes.push(s.charCodeAt(i) & 255);
   for (y = 0; y < N; y++) { m.push([]); f.push([]); for (x = 0; x < N; x++) { m[y].push(false); f[y].push(false); } }
   function set(x, y, dark) { m[y][x] = dark; f[y][x] = true; }
@@ -1629,10 +1646,13 @@ function lcQrMatrix(text) {
   rem = 40; for (i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
   var ver = (40 << 12) | rem;
   for (i = 0; i < 18; i++) { var a = N - 11 + i % 3, b = Math.floor(i / 3); set(a, b, bit(ver, i)); set(b, a, bit(ver, i)); }
-  // Data: mode 0100, 16-bit length, the bytes, terminator, padding to 2,334 data codewords.
+  // Data: (for one of several codes: mode 0011, its index, the total - 1, the parity of all the text), then mode
+  // 0100, 16-bit length, the bytes, terminator, padding to 2,334 data codewords.
   var bits = [], cap = 2334 * 8;
   function put(v, n) { for (var k = n - 1; k >= 0; k--) bits.push((v >>> k) & 1); }
+  if (part) { put(3, 4); put(part[0], 4); put(part[1] - 1, 4); put(part[2], 8); }
   put(4, 4); put(bytes.length, 16); for (i = 0; i < bytes.length; i++) put(bytes[i], 8);
+  if (bits.length > cap) throw new Error("too much text for one QR code (" + bytes.length + " bytes)");
   put(0, Math.min(4, cap - bits.length)); while (bits.length % 8) bits.push(0);
   var data = []; for (i = 0; i < bits.length; i += 8) { var v = 0; for (j = 0; j < 8; j++) v = (v << 1) | bits[i + j]; data.push(v); }
   for (i = 0; data.length < 2334; i++) data.push(i % 2 ? 0x11 : 0xEC);
@@ -1661,11 +1681,27 @@ function lcQrMatrix(text) {
   for (y = 0; y < N; y++) for (x = 0; x < N; x++) if (!f[y][x] && (x + y) % 2 == 0) m[y][x] = !m[y][x];
   return m;
 }
+// lcDrawQr(doc, text) draws text as one QR code, or as two when it is too long for one, and returns how many.
+// Each code's rows go into the read-only text boxes "__qr1_0" ... "__qr1_176" (and "__qr2_..."), as the letter
+// "n" in the ZapfDingbats font (which prints as a black square) for each dark square. The second code's frame
+// and the "QR code 1 of 2" labels appear only when there are two. lcDrawQr(doc, "") clears both.
 function lcDrawQr(d, text) {
-  var m = lcQrMatrix(text), y, x, s, calc = d.calculate;
-  d.calculate = false; // 177 rows: don't re-run the checks after each one
-  try { for (y = 0; y < m.length; y++) { s = ""; for (x = 0; x < m.length; x++) s += m[y][x] ? "n" : " "; d.getField("__qr_" + y).value = s; } }
-  finally { d.calculate = calc; }
+  var ONE = 2329, s = unescape(encodeURIComponent(text)), parts = [], codes = [], parity = 0, i, k, y, x, row, calc = d.calculate;
+  if (s.length > 2 * ONE) throw new Error("the answers are too long for two QR codes (" + s.length + " characters, at most " + 2 * ONE + ")");
+  for (i = 0; i < s.length; i++) parity ^= s.charCodeAt(i) & 255;
+  if (s.length > ONE) parts = [s.slice(0, Math.ceil(s.length / 2)), s.slice(Math.ceil(s.length / 2))];
+  else if (s.length) parts = [s];
+  for (k = 0; k < parts.length; k++) codes.push(lcQrMatrix(parts[k], parts.length > 1 ? [k, parts.length, parity] : null));
+  d.calculate = false; // 354 rows: don't re-run the checks after each one
+  try {
+    for (k = 1; k <= 2; k++) {
+      for (y = 0; y < 177; y++) { row = ""; if (codes[k - 1]) for (x = 0; x < 177; x++) row += codes[k - 1][y][x] ? "n" : " ";
+        d.getField("__qr" + k + "_" + y).value = row; }
+      d.getField("__qr" + k + "_label").value = codes.length > 1 ? "QR code " + k + " of 2" + (k == 1 ? " (scan both codes)" : "") : "";
+    }
+    d.getField("__qr2_frame").display = codes.length > 1 ? display.visible : display.hidden;
+  } finally { d.calculate = calc; }
+  return codes.length;
 }
 """[1:-1]
 
@@ -1692,19 +1728,20 @@ else app.alert("All mandatory questions are answered and every answer is in the 
     "reset-form": r"""
 // "RESET FORM" BUTTON: asks first, then sets every answer back to how the form started, and re-checks.
 if (app.alert("Are you sure you want to reset the form? All your answers will be cleared.", 2, 2) == 4) {
-this.resetForm(); if (typeof lcDates == "function") lcDates(this); if (typeof lcRules == "function") lcRules(this); }
+this.resetForm(); if (typeof lcDrawQr == "function") lcDrawQr(this, ""); if (typeof lcDates == "function") lcDates(this); if (typeof lcRules == "function") lcRules(this); }
 """[1:-1],
     "generate-qr": r"""
 // "GENERATE QR CODE" BUTTON: refuses while anything is missing or wrong; otherwise makes the QR code from the
-// answers (lcPayload, lcDrawQr) and goes to the QR code page.
+// answers (lcPayload, lcDrawQr), or two codes if the answers don't fit in one, and goes to the QR code page.
 var m = typeof lcRules == "function" ? lcRules(this) : [], b = m.bad || [], t = [];
 function list(a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
 if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
 if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
 if (t.length) { app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
   var g = m.first && this.getField(m.first); if (g) g.setFocus(); }
-else { try { var q = this.getField("__qr"); q.value = lcPayload(this); lcDrawQr(this, q.value); this.pageNum = this.numPages - 1;
-  app.alert("The QR code has been generated from your answers (" + q.value.length + " characters). Press Print Form to print the form with the QR code.", 3); }
+else { try { var q = this.getField("__qr"); q.value = lcPayload(this); var n = lcDrawQr(this, q.value); this.pageNum = this.numPages - 1;
+  if (n == 1) app.alert("The QR code has been generated from your answers (" + q.value.length + " characters). Press Print Form to print the form with the QR code.", 3);
+  else app.alert("Your answers (" + q.value.length + " characters) are too long for one QR code, so two codes have been generated, one under the other. The Bank scans both. Press Print Form to print the form with the QR codes.", 3); }
   catch (e) { app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1); } }
 """[1:-1],
     "print-form": r"""
