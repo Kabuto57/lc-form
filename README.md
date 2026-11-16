@@ -3,26 +3,29 @@
 This project builds one PDF: the **Irrevocable Documentary Credit Application** (Demo Bank, Form LC-01 · v1.0 · Nov 2026).
 It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It's built in **Python**.
 
-<!-- AUTO:summary (written by build_lc.py from lc.py; don't edit by hand) -->
+<!-- AUTO:summary (written by build_form.py from lc.py; don't edit by hand) -->
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 297 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and 177 QR rows.
 <!-- /AUTO:summary -->
 
 - Needs Python 3.9 or later and **one library, pikepdf**. All its licences are permissive (no GPL/AGPL).
-- **7 files.** One command builds the PDF and checks it.
+- **Two files build it:** `lc.py` (what the form asks) and `build_form.py` (how a form becomes a PDF). Nothing else is
+  needed: the JavaScript and font measurements are inside `build_form.py`. One command builds the PDF and checks it.
+- **New forms use the same builder.** Copy `lc.py`, change the questions, and run `build_form.py` on the copy (see
+  [Making a new form](#making-a-new-form)).
 
 ## Run it
 
 ```
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python build_lc.py                       # builds out/LC-Application.pdf, checks it, prints PASS
+.venv/bin/python build_form.py lc.py               # builds out/LC-Application.pdf, checks it, prints PASS
 .venv/bin/python -m http.server 8090 -d out        # serves it at http://localhost:8090 (Ctrl+C stops it)
 ```
 
 On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`.
 
-`build_lc.py` checks the PDF before saving it. If anything is wrong (a missing field, a broken rule, a damaged
+`build_form.py` checks the PDF before saving it. If anything is wrong (a missing field, a broken rule, a damaged
 file), it stops with the reason and doesn't save a broken PDF. It then brings this README up to date (see below).
 
 **This README keeps itself up to date.** The parts that come straight from `lc.py` (the page and field counts, the
@@ -38,16 +41,20 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
 
 ```
                  ┌──────────────────────────────────────────────────────────────┐
-  lc.py          │ THE FORM: 108 questions, their options and rules             │  ← you edit this
+  lc.py          │ THE FORM (what it asks): 108 questions, options and rules    │  ← you edit this
+  (form file)    │ FORM, DEFAULTS, and the settings PDF_NAME, PAGES, README     │
                  └──────────────────────────────┬───────────────────────────────┘
-                                                ▼
+                                                ▼  python build_form.py lc.py
                  ┌──────────────────────────────────────────────────────────────┐
-  build_lc.py    │ STEP 1  Lay out the pages                                    │
-                 │         sections, questions, boxes, QR page, footers         │
-                 │ STEP 2  Add the scripts (from js/), buttons, QR code rows    │
+  build_form.py  │ 1.      Question helpers (text, radio, date ...) for forms   │
+  (the builder,  │ STEP 1  Lay out the pages                                    │
+   any form)     │         sections, questions, boxes, QR page, footers         │
+                 │ STEP 2  Add the scripts, buttons, QR code rows               │
                  │ STEP 3  Write the PDF with pikepdf                           │
                  │ CHECK   Open the result, check it question by question       │
                  │ DOCS    Rewrite this README's question tables and counts     │
+                 │ Appendix A  the JavaScript stored in the PDF                 │
+                 │ Appendix B  Helvetica letter widths                          │
                  └──────────────────────────────┬───────────────────────────────┘
                                                 ▼
                  ┌──────────────────────────────────────────────────────────────┐
@@ -56,51 +63,57 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
                  └──────────────────────────────┬───────────────────────────────┘
                                                 ▼  opened in Adobe Acrobat / Reader
                  ┌──────────────────────────────────────────────────────────────┐
-  js/            │ document.js  rules engine (red boxes, locking, checks),      │
-  (stored inside │              QR code text, QR code encoder                   │
-   the PDF)      │ buttons.js   Check form, Reset form, Generate QR Code,       │
+  inside the PDF │ DOCUMENT_JS  rules engine (red boxes, locking, checks),      │
+  (Appendix A)   │              QR code text, QR code encoder                   │
+                 │ BUTTON_JS    Check form, Reset form, Generate QR Code,       │
                  │              Print Form, warning before save / print         │
                  └──────────────────────────────────────────────────────────────┘
 ```
+
+**Why two files.** The form and the builder are kept apart so that changing a question never means touching the
+builder, and a new form never means copying it. Everything the builder needs is inside it: earlier versions read
+the JavaScript from a `js/` folder, so copying only the Python files left the PDF without its scripts. Now the two
+files are all there is, and the build checks that the scripts, buttons and QR rows are in every PDF it writes.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `lc.py` | **The form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list and the starting answers. The only file you need to change for wording or rules. |
-| `build_lc.py` | **The builder.** Lays out the pages, adds the scripts and buttons, writes the PDF, checks it, and updates this README. One file in numbered sections, with a contents list at the top (see below). |
-| `js/document.js` | **The rules engine**, run by Acrobat inside the PDF: colours boxes red or black, locks questions that don't apply, checks formats and dates. Also makes the QR code's text and draws the code. |
-| `js/buttons.js` | **The buttons**, run by Acrobat: Check form, Reset form, Generate QR Code, Print Form, and the warning before saving or printing. One section per button. |
-| `helvetica-metrics.json` | Data: Adobe's letter widths for Helvetica, so text is measured exactly as Acrobat draws it. Never changes. |
+| `lc.py` | **The form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and three build settings (`PDF_NAME`, `PAGES`, `README`). The only file you change for wording or rules. |
+| `build_form.py` | **The builder.** Works for any form file. Lays out the pages, adds the scripts and buttons, writes the PDF, checks it, and updates this README. Contains the JavaScript (Appendix A) and the font measurements (Appendix B). One file in numbered sections, with a contents list at the top. |
 | `requirements.txt` | The one library (pikepdf) and its three dependencies, at exact versions. |
 | `README.md` | This guide. |
 
-**Inside `build_lc.py`:**
+**Inside `build_form.py`:**
 
 | Section | What it does | Change it to... |
 |---|---|---|
-| 1. Settings | Page size, colours, text sizes, spacing, answer formats | Change the look or the formats |
-| 2. Text helpers | Safe characters for the PDF fonts, measuring and wrapping text | (rarely) |
-| 3. Rules and dates | "Is this question mandatory now?", "does it apply now?", the date list | (rarely) |
-| 4. Step 1: lay out the pages | Where every section, question and box goes | Change how questions are arranged |
-| 5. Step 2: scripts, buttons, QR rows | Builds the rules table, attaches the scripts, places the buttons | Add or move a button |
-| 6. Step 3: write the PDF | Turns everything into PDF objects with pikepdf | (rarely) |
-| 7. Build | Runs the three steps | (rarely) |
-| 8. Self-check | Opens the built PDF and checks it | Update the field count if you add or remove questions |
-| 9. Documentation | Rewrites this README's question tables, counts and starting answers from `lc.py` | Change how those tables look |
-| 10. Run | Builds, checks, saves, updates the README | (rarely) |
+| 1. Question helpers | `text`, `long`, `date`, `radio`, `checks`, `check`, `select`, `section`, and the rules `when`, `ticked`, `answered`; lists every option a question can have | Add a new kind of option |
+| 2. Settings | Page size, colours, text sizes, spacing, answer formats | Change the look or the formats |
+| 3. Text helpers | Safe characters for the PDF fonts, measuring and wrapping text | (rarely) |
+| 4. Rules and dates | "Is this question mandatory now?", "does it apply now?", the date list | (rarely) |
+| 5. Step 1: lay out the pages | Where every section, question and box goes | Change how questions are arranged |
+| 6. Step 2: scripts, buttons, QR rows | Builds the rules table, attaches the scripts, places the buttons | Add or move a button |
+| 7. Step 3: write the PDF | Turns everything into PDF objects with pikepdf | (rarely) |
+| 8. Build | Runs the three steps | (rarely) |
+| 9. Self-check | Opens the built PDF and checks every question's fields, flags, limits, defaults and rules | (rarely) |
+| 10. Documentation | Rewrites this README's question tables, counts and starting answers from the form | Change how those tables look |
+| 11. Run | Loads the form file, builds, checks, saves, updates the README | (rarely) |
+| Appendix A | The JavaScript Acrobat runs: `DOCUMENT_JS` (rules engine, QR text, QR encoder) and `BUTTON_JS` (one entry per button) | Change how the form checks answers, or what a button does |
+| Appendix B | Adobe's Helvetica letter widths (`METRICS`) | Never |
 
 **Where to change what:**
 
 | You want to change | Edit |
 |---|---|
 | A question's wording, options, mandatory rule, max length or format | `lc.py` |
-| Add or remove a question | `lc.py`, then the field count (297) in `build_lc.py` section 8 |
-| Colours, text sizes, spacing, margins, answer formats | `build_lc.py` section 1 |
-| How sections and questions are arranged | `build_lc.py` section 4 |
-| How the form checks answers in Acrobat | `js/document.js` |
-| What the QR code holds | `js/document.js` (`lcPayload`) |
-| What a button says or does | its section in `js/buttons.js` |
+| Add or remove a question | `lc.py` (nothing else: the self-check follows the form) |
+| The number of pages the form must fit on | `PAGES` in `lc.py` |
+| Colours, text sizes, spacing, margins, answer formats | `build_form.py` section 2 |
+| How sections and questions are arranged | `build_form.py` section 5 |
+| How the form checks answers in Acrobat | `DOCUMENT_JS` in `build_form.py` Appendix A |
+| What the QR code holds | `lcPayload` in `DOCUMENT_JS` (Appendix A) |
+| What a button says or does | its entry in `BUTTON_JS` (Appendix A) |
 
 ## Libraries and licences
 
@@ -114,22 +127,23 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
 
 All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
 your own code. MPL-2.0 only asks that changes to *pikepdf's own files* be shared, and this project doesn't change them.
-There's no QR library: the QR code is made inside the PDF, by `js/document.js`, when the person presses Generate QR Code.
+There's no QR library: the QR code is made inside the PDF, by `DOCUMENT_JS`, when the person presses Generate QR Code.
 
 **Why not PyMuPDF or pdf-lib?** Earlier versions used them. PyMuPDF is AGPL-3.0, a licence banks usually avoid, and its
 2.x release installs about a dozen extra AI packages (onnxruntime, numpy, ...). pdf-lib (JavaScript) is MIT but hasn't
 had a release since 2021, so security fixes won't come. pikepdf is permissive, actively maintained, and enough on
-its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `build_lc.py` section 4).
+its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `build_form.py` section 5).
 
 ## Security
 
 - **What's installed:** 4 packages, about 54 MB, pinned to exact versions in `requirements.txt`. Prebuilt Python
   packages (wheels) don't run code when installed.
 - **Native code:** pikepdf includes qpdf (C++). Bugs in PDF libraries usually matter when *opening* untrusted PDFs.
-  This builder only *creates* a PDF from `lc.py`, and opens nothing from outside.
+  This builder only *creates* a PDF from a form file, and opens nothing from outside. Note that a form file is
+  Python and is run by the builder, so only build form files you trust (treat them like code, not data).
 - **Where it runs:** build on a trusted machine, and hand out only the finished PDF. People filling in the form
   never get the libraries.
-- **What's in the PDF:** JavaScript (the files in `js/`) that runs in each user's Acrobat. This is the same whatever
+- **What's in the PDF:** JavaScript (Appendix A of `build_form.py`) that runs in each user's Acrobat. This is the same whatever
   builds the PDF, and it's what the bank's IT policy on Acrobat JavaScript applies to. The scripts only read and
   write the form's own fields, show messages and print. They make no network calls and open no files.
 - **Upgrading:** run `.venv/bin/pip list --outdated` to see newer versions, then change the version numbers in
@@ -138,9 +152,9 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `b
 
 ## How the PDF is built
 
-`python build_lc.py` reads the form from `lc.py`, runs three steps, then checks the result:
+`python build_form.py lc.py` reads the form from `lc.py`, runs three steps, then checks the result:
 
-1. **Lay out the pages (section 4).** Decides where everything goes, and writes each page's text, lines
+1. **Lay out the pages (section 5).** Decides where everything goes, and writes each page's text, lines
    and boxes as PDF drawing commands.
    - Header on every page ("DEMO BANK · TRADE SERVICES"); the title and instructions on page 1.
    - Each section: a grey heading band with its number, then its questions on a 12-column grid. Short questions
@@ -150,11 +164,11 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `b
    - The declaration block (signature, date and company-stamp lines), the QR code page, and the footers on every
      page ("Form LC-01 · v1.0 · Nov 2026", "< Previous page" / "Next page >", "Page n of 4").
    - It also records every fillable box (text box, tick box, drop-down ...) and where it goes. Step 3 makes them.
-2. **Add the scripts and buttons (section 5).** Builds the rules table from `lc.py` and fills it into
-   `js/document.js`, and says when the rules run (on a click, and on leaving a
+2. **Add the scripts and buttons (section 6).** Builds the rules table from `lc.py` and fills it into
+   `DOCUMENT_JS`, and says when the rules run (on a click, and on leaving a
    box). Adds the Check form and Reset form buttons on every page, the 177 QR code rows, and the Generate QR Code
    and Print Form buttons.
-3. **Write the PDF (section 6, with pikepdf).** Makes every field with its settings and its look (border,
+3. **Write the PDF (section 7, with pikepdf).** Makes every field with its settings and its look (border,
    background, tick, radio dot), the page links, the stored scripts, and a copy of the form's description (JSON)
    for the bank's workbench to read.
 
@@ -202,7 +216,7 @@ A wrong whole answer gets an alert when you leave the box, and the box refuses i
 
 ### Defaults when the form opens
 
-<!-- AUTO:defaults (written by build_lc.py from lc.py; don't edit by hand) -->
+<!-- AUTO:defaults (written by build_form.py from lc.py; don't edit by hand) -->
 - 2.1 Mode of advising: **Full Swift**
 - 11.2 Presentation period (days after shipment): **21**
 - 17.1 All bank charges are for account of: **ticked**
@@ -219,7 +233,7 @@ A wrong whole answer gets an alert when you leave the box, and the box refuses i
 until that condition holds, except for 10.4 and 10.7, which are never locked. "Unlocked when" means the question only
 applies then, but stays optional.
 
-<!-- AUTO:questions (written by build_lc.py from lc.py; don't edit by hand) -->
+<!-- AUTO:questions (written by build_form.py from lc.py; don't edit by hand) -->
 **1. Application**
 
 | No. | Field | Question | Type | Mandatory | Max | Format |
@@ -287,7 +301,7 @@ applies then, but stays optional.
 
 | No. | Field | Question | Type | Mandatory | Max | Format |
 |---|---|---|---|---|---|---|
-| 8.1 | `currency` | Currency | drop-down: ISO currency codes | **always** |  |  |
+| 8.1 | `currency` | Currency | drop-down: 160 options (SGD, USD, EUR, ...) | **always** |  |  |
 | 8.2 | `amount` | Amount | text | **always** |  | amount |
 | 8.3 | `gst` | For local DCs, amount is (if not checked, it will be inclusive of GST) | pick one: inclusive of GST / No GST | no |  |  |
 | 8.4 | `tolerance` | Tolerance on credit amount & goods quantity | tick box | no |  |  |
@@ -405,7 +419,7 @@ applies then, but stays optional.
 | 17.4 | `confirmation_charges` | Confirmation charges | pick one: Applicant / Beneficiary | when 17.3 is ticked |  |  |
 | 17.5 | `post_shipment_financing` | Please provide us with post-shipment financing under Documentary Cr... | tick box | no |  |  |
 | 17.6 | `financing_type` | Financing | pick one: SGD financing / Foreign Currency Financing / Apply Forward Contract | when 17.5 is ticked |  |  |
-| 17.7 | `financing_currency` | Foreign currency financing in (type of currency) | drop-down: ISO currency codes | when 17.6 = "Foreign Currency Financing" |  |  |
+| 17.7 | `financing_currency` | Foreign currency financing in (type of currency) | drop-down: 160 options (SGD, USD, EUR, ...) | when 17.6 = "Foreign Currency Financing" |  |  |
 | 17.8 | `forward_contract_no` | Forward contract no | text | when 17.6 = "Apply Forward Contract" | 20 |  |
 | 17.9 | `advance_payment` | We authorise you to debit DC amount in full from our account for ad... | tick box | no |  |  |
 | 17.10 | `advance_payment_account` | Account no for advance payment | text | when 17.9 is ticked | 20 | account |
@@ -421,7 +435,7 @@ applies then, but stays optional.
 
 ## The JavaScript inside the PDF
 
-Everything is stored in one document-level script, named `lcRules`, built from `js/document.js`. It defines these
+Everything is stored in one document-level script, named `lcRules`, built from `DOCUMENT_JS` (Appendix A of `build_form.py`). It defines these
 functions:
 
 - `lcRules(doc)`: the rules engine. It holds a table `M` of every question that has a rule, a format or
@@ -443,7 +457,7 @@ When `lcRules` runs:
 | Check form, Generate QR Code, Print Form | button actions |
 | Before save or print | catalog `/AA /WS` and `/WP`: warns if the form is incomplete (but doesn't block) |
 
-The buttons (`js/buttons.js`):
+The buttons (`BUTTON_JS`, Appendix A):
 
 - **Check form** lists what's missing or wrong (at most 15 of each) and puts the cursor on the first problem. If
   nothing is wrong, it says the form is ready.
@@ -460,7 +474,7 @@ boxes keep their red outline. Nothing is checked, though.
 The code is made **inside the PDF, in Acrobat**, when the person presses Generate QR Code. It isn't made by Python,
 and no QR library is used.
 
-1. **The text: `lcPayload` (`js/document.js`).** It gathers every answered question, keyed by field id. Tick boxes
+1. **The text: `lcPayload` (`DOCUMENT_JS`).** It gathers every answered question, keyed by field id. Tick boxes
    become `true`, and tick-any questions become lists:
    ```json
    {"form": "LC-01", "version": "1.0", "saved": "2026-11-12T16:30", "complete": true,
@@ -469,11 +483,11 @@ and no QR library is used.
    - The JSON is padded with spaces to 2,300 characters, so the code is always the same size.
    - If it would be longer, Goods description and then Additional conditions are shortened (ending in "...") and
      listed in `"truncated"`. The full text stays in the PDF's fields.
-2. **The code: `lcQrMatrix` (`js/document.js`).** A standard QR encoder, about 70 lines.
+2. **The code: `lcQrMatrix` (`DOCUMENT_JS`).** A standard QR encoder, about 70 lines.
    - It makes a version 40 code (177 × 177 squares), with error correction level M, byte mode and mask 0.
    - It places the fixed patterns (finders, timing, alignment, format and version bits).
    - It adds Reed-Solomon error correction: 49 blocks, 28 correction bytes each.
-3. **The drawing: `lcDrawQr` (`js/document.js`).** Acrobat scripts can't draw pixels, and Acrobat's own barcode field is
+3. **The drawing: `lcDrawQr` (`DOCUMENT_JS`).** Acrobat scripts can't draw pixels, and Acrobat's own barcode field is
    missing in some installations. So the QR page has **177 read-only text fields, one per row of the code**, each
    with 177 fixed character slots. Each dark square is the letter "n" in the ZapfDingbats font, which prints as a
    solid black square. Each row is set as a string, for example `"nnn n  nn…"`.
@@ -502,10 +516,52 @@ text("term_days", "Term: days", requiredIf=when("drafts_at", "Term"), format="nu
 ```
 
 This line makes a half-width text box named `term_days`, labelled "Term: days". It's mandatory (and unlocked) only
-when Drafts at = Term, and it takes digits only. All the options are listed at the top of `lc.py`. The layout,
-numbering, scripts, QR code and this README's question table all follow from these lines. Then run
-`python build_lc.py` (it checks itself and updates the README). If
-you add or remove questions, update the field count (297) in `build_lc.py` section 8.
+when Drafts at = Term, and it takes digits only. Every kind of question and every option is listed in
+`build_form.py` section 1. The layout, numbering, scripts, QR code and this README's question table all follow from
+these lines. Then run `python build_form.py lc.py` (it checks itself and updates the README).
+
+If the build stops with `expected 4 pages`, the change made the form longer than the approved layout: shorten it,
+or change `PAGES` in `lc.py` if a longer form is approved.
+
+## Making a new form
+
+1. Copy `lc.py` to a new name, e.g. `leave_form.py`, in the same folder as `build_form.py`.
+2. Keep the `from build_form import ...` line. Replace the sections and questions, and set `FORM` (title, note,
+   issuer, formCode such as `"Form HR-07 · v1.0 · Nov 2026"`) and `DEFAULTS` (or delete `DEFAULTS`).
+3. At the end, set `PDF_NAME` (or delete it: the file is then named after the title), and delete `PAGES` and
+   `README` unless you want a fixed page count or a README kept up to date.
+4. Run `python build_form.py leave_form.py`. The PDF goes in `out/`, and the build prints PASS or the reason it stopped.
+
+A small form looks like this:
+
+```python
+from build_form import check, date, long, radio, section, text, ticked, when
+
+FORM = {
+    "title": "Annual Leave Request",
+    "note": "Please complete in block letters.",
+    "issuer": "Demo Bank · HR",
+    "formCode": "Form HR-07 · v1.0 · Nov 2026",
+    "sections": [
+        section("Employee", fields=[
+            text("name", "Full name", required=True, max=35),
+            text("staff_no", "Staff number", required=True, max=8, format="number"),
+        ]),
+        section("Leave", fields=[
+            date("start", "First day", required=True, half=True),
+            date("end", "Last day", required=True, half=True),
+            radio("type", "Type of leave", ["Annual", "Medical", "Other"], required=True),
+            text("other_type", "Other: please say", requiredIf=when("type", "Other"), max=30),
+            check("handover", "I have handed over my work"),
+            long("handover_notes", "Handover notes", requiredIf=ticked("handover"), max=500),
+        ]),
+    ],
+}
+DEFAULTS = {"type": "Annual"}
+```
+
+Every form gets the same features: red mandatory boxes, locking, Check form, Reset form, the QR code page and
+Print Form. (This example builds a 2-page PDF with 193 fields; most of them are the 177 rows of the QR code.)
 
 ## Where this came from
 
@@ -514,7 +570,7 @@ you add or remove questions, update the field count (297) in `build_lc.py` secti
    version, the extra modes, and the command-line and one-file-builder options are gone. Before any other change,
    its output matched the full builder's (pages, words, every field and widget, scripts).
 2. **Layout changed to match the approved 4-page copy (`test form - Copy.pdf`).** 13.2 now sits beside its box, and the
-   Drafts box ends 3 pt higher (`beside` in `lc.py`; `BESIDE_GAP` in `build_lc.py` section 1). Every
+   Drafts box ends 3 pt higher (`beside` in `lc.py`; `BESIDE_GAP` in `build_form.py` section 2). Every
    field's page and position matches the copy to within 0.1 pt, and so does every line of text on all 4 pages. These
    defects in the copy were deliberately **not** copied:
    - Its section 14 box on page 2 runs down through the footer.
@@ -535,3 +591,10 @@ you add or remove questions, update the field count (297) in `build_lc.py` secti
 8. **Libraries and stale notes updated.** pikepdf 10.18.0 to 10.18.1 (the other three were already the latest).
    `requirements.txt` now says what each package is for and its licence. Notes in `lc.py` and `js/document.js` that
    still named files removed in step 6 (`check.py`, `lcbuild/scripts.py`) now point to `build_lc.py`.
+9. **Two files: the form and the builder.** `build_lc.py` became `build_form.py`, which builds any form file
+   (`python build_form.py lc.py`). The JavaScript (`js/document.js`, `js/buttons.js`) and the font measurements
+   (`helvetica-metrics.json`) moved inside it, so `lc.py` and `build_form.py` alone build the PDF. The question
+   helpers (`text`, `radio`, ...) moved into the builder, so a form file only describes its form. The self-check no
+   longer has the LC form's field count written into it: it checks whatever the form file says, and the page count
+   comes from `PAGES` in `lc.py`. The PDF is byte-for-byte identical to before apart from two script comments that
+   named old files, all 26 script tests pass, and the QR code still scans.

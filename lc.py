@@ -1,61 +1,19 @@
 """THE FORM: the Irrevocable Documentary Credit (LC) application, Form LC-01.
 
-Each question is one line. For example
+This file says WHAT the form asks; build_form.py turns it into the PDF:   python build_form.py lc.py
+
+Each question is one line, made with the helpers from build_form.py (section 1 there lists every kind and option).
+For example
     text("term_days", "Term: days", requiredIf=when("drafts_at", "Term"), format="number"),
 is a half-width text box named term_days, labelled "Term: days", mandatory (and unlocked) only when
 Drafts at = Term, digits only. The layout, numbering, scripts and QR code all follow from these lines.
 
-Question kinds:  text, long (paragraph), date, radio (pick one), checks (tick any), check (one tick box), select (drop-down)
-Options:
-    required=True                    always mandatory (red *)
-    requiredIf=ticked("x")           mandatory, and unlocked, only when tick box x is ticked
-    requiredIf=when("x", "A", "B")   mandatory only when x is A or B
-    requiredIf=answered("x")         mandatory once x has any answer (never locked)
-    activeIf=ticked("x")             only applies (unlocked) when x is ticked, but optional
-    max=35                           at most 35 characters
-    format="amount"                  amount / number / phone / account (see FORMATS in build_lc.py)
-    half=False                       full width (text boxes are half width unless this is given)
-    beside=69.3                      label beside a box this wide, even when the label is long (only 13.2)
-After a change:  python build_lc.py   (builds the PDF, checks it, and refreshes the tables in README.md)
+To make a new form: copy this file, keep the import line, and change the questions, FORM, DEFAULTS and the settings
+at the end.
 """
 
 
-def ask(kind):
-    def make(id, label, **more):
-        return {"id": id, "label": label, "kind": kind, **more}
-    return make
-
-
-long, date, checks, select = ask("long"), ask("date"), ask("checks"), ask("select")
-
-
-def text(id, label, **more):
-    return {"id": id, "label": label, "kind": "text", "half": True, **more}
-
-
-def check(id, label, **more):
-    return {"id": id, "label": label, "kind": "check", **more}
-
-
-def radio(id, label, options, **more):
-    return {"id": id, "label": label, "kind": "radio", "options": options, **more}
-
-
-def section(title, **more):
-    return {"title": title, **more}
-
-
-def when(field, *values):
-    return [{"field": field, "values": list(values)}]
-
-
-def ticked(field):
-    return when(field, "true")
-
-
-def answered(field):
-    return [{"field": field, "values": [""], "not": True}]
-
+from build_form import answered, check, checks, date, long, radio, section, select, text, ticked, when
 
 # ISO 4217 currency codes, common trade currencies first.
 CURRENCIES = ["SGD", "USD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD", "NZD", "CAD", "CHF", "MYR", "IDR", "THB", "INR", "KRW", "TWD", "PHP", "VND", "AED", "SAR", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AWG", "AZN", "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", "CDF", "CLP", "COP", "CRC", "CUC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "FJD", "FKP", "GEL", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HNL", "HRK", "HTG", "HUF", "ILS", "IQD", "IRR", "ISK", "JMD", "JOD", "KES", "KGS", "KHR", "KMF", "KPW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "OMR", "PAB", "PEN", "PGK", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SBD", "SCR", "SDG", "SEK", "SHP", "SLE", "SOS", "SRD", "SSP", "STN", "SVC", "SYP", "SZL", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TZS", "UAH", "UGX", "UYU", "UZS", "VES", "VUV", "WST", "XAF", "XCD", "XCG", "XDR", "XOF", "XPF", "XSU", "YER", "ZAR", "ZMW", "ZWG"]
@@ -208,7 +166,7 @@ SECTIONS = [
 
 ]
 
-LC = {
+FORM = {
     "title": "Irrevocable Documentary Credit Application",
     "note": "Please complete in block letters. Dates are DD/MM/YYYY.",
     "sections": SECTIONS,
@@ -225,3 +183,8 @@ DEFAULTS = {
     "post_shipment_financing": True,
     "debit_issuance_charges": True,
 }
+
+# How the build handles this form (all optional, see build_form.py section 11).
+PDF_NAME = "LC-Application.pdf"   # written to out/
+PAGES = 4                          # the approved layout: 3 pages of questions plus the QR code page
+README = "README.md"               # its question tables, counts and starting answers are rewritten on every build
