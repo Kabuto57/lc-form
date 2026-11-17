@@ -62,7 +62,7 @@ function wrong(id) {
 function day(s) { var x = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(s), k = x && new Date(+x[3], x[2] - 1, +x[1]); return k && k.getDate() == +x[1] && k.getMonth() == x[2] - 1 ? k : null; }
 function v(id) { return M[id] ? val(id) : ""; }
 
-// Checks across answers (the same as cross-checks in form/validate.ts). Skipped when a form doesn't have the fields.
+// Checks across answers (the same as checks_across in read_qr.py). Skipped when a form doesn't have the fields.
 function across() {
   var X = {}, A = day(v("application_date")), S = day(v("latest_shipment_date")), E = day(v("expiry_date")), a = v("amount"), pb = v("price_basis");
   if (S && E && E < S) X.expiry_date = "is before the latest shipment date";

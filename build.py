@@ -2,8 +2,8 @@
 """BUILD A FORM AS A FILLABLE PDF.      python build.py lc_form.py      ->  out/LC-Application.pdf
 
 THE 5 FILES THAT BUILD A FORM (keep them together in one folder)
-    lc_form.py      WHAT the form asks: one line per question. The only file you change for the LC form.
-                    To make a new form, copy example_form.py (small) or lc_form.py, and change the questions.
+    <name>_form.py  WHAT the form asks: one line per question (lc_form.py is the LC form). Every form file has
+                    the same parts in the same order; to make a new form, copy example_form.py and change it.
     build.py        THIS FILE. Run it. Its first section lists every kind of question and every option.
     layout.py       Step 1: where everything goes on the page (and the colours, sizes and answer formats).
     pdf_writer.py   Steps 2 and 3: adds the checks and buttons, writes the PDF, then checks the PDF.
@@ -52,8 +52,6 @@ import sys
 #     beside=69.3                         label beside a box this wide, even when the label is long
 #     cols=12                             how much of the row it takes, out of 12: cols=12 whole row, cols=6 half,
 #                                         cols=4 a third. Leave it out to let the build choose (usually best)
-#     half=True / half=False              kept in the PDF's copy of the form, but has no effect on the layout:
-#                                         box widths are worked out automatically from the label and max (use cols)
 # Sections:  section("Title", fields=[...]), plus
 #     note="..."                          text under the heading
 #     bankOnly=True                       shaded, "For Bank Use Only"
@@ -79,7 +77,7 @@ long, date, checks, select, check = question("long"), question("date"), question
 
 
 def text(id, label, **more):
-    return {"id": id, "label": label, "kind": "text", "half": True, **more}
+    return {"id": id, "label": label, "kind": "text", **more}
 
 
 def radio(id, label, options, **more):
@@ -105,9 +103,13 @@ def answered(field):
     return [{"field": field, "values": [""], "not": True}]
 
 
+# ---- Shared lists: any form file can use them (options=CURRENCIES)
+# ISO 4217 currency codes, common trade currencies first.
+CURRENCIES = ["SGD", "USD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD", "NZD", "CAD", "CHF", "MYR", "IDR", "THB", "INR", "KRW", "TWD", "PHP", "VND", "AED", "SAR", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AWG", "AZN", "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", "CDF", "CLP", "COP", "CRC", "CUC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "FJD", "FKP", "GEL", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HNL", "HRK", "HTG", "HUF", "ILS", "IQD", "IRR", "ISK", "JMD", "JOD", "KES", "KGS", "KHR", "KMF", "KPW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "OMR", "PAB", "PEN", "PGK", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SBD", "SCR", "SDG", "SEK", "SHP", "SLE", "SOS", "SRD", "SSP", "STN", "SVC", "SYP", "SZL", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TZS", "UAH", "UGX", "UYU", "UZS", "VES", "VUV", "WST", "XAF", "XCD", "XCG", "XDR", "XOF", "XPF", "XSU", "YER", "ZAR", "ZMW", "ZWG"]
+
 # ---- check_form: explains mistakes in a form file before anything is built -------------------------------------
 KINDS = ("text", "long", "date", "radio", "checks", "check", "select")
-QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols"}
+QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "beside", "cols"}
 SECTION_OPTIONS = {"title", "fields", "note", "bankOnly", "signoff", "width", "new_page"}
 
 
@@ -224,8 +226,26 @@ def index_html(title, pdf_name):
 """
 
 
+def check_names(form_path, form):
+    """The file name and form code every form needs, so read_qr.py can find the right form file for a QR code."""
+    name = os.path.basename(form_path)
+    if not name.endswith("_form.py"):
+        raise SystemExit(f"PROBLEM: rename {name} to end in _form.py (e.g. trade_loan_form.py), so read_qr.py can find it.")
+    code = re.search(r"[A-Z]+-\d+", form.get("formCode") or "")
+    if not code:
+        raise SystemExit(f'PROBLEM IN THE FORM FILE: "formCode" needs a form code like "Form EB-01 · v1.0 · Nov 2026".')
+    for other in sorted(os.listdir(os.path.dirname(os.path.abspath(form_path)))):
+        if other.endswith("_form.py") and other != name:
+            with open(os.path.join(os.path.dirname(os.path.abspath(form_path)), other), encoding="utf-8-sig") as f:
+                theirs = re.search(r'"formCode":\s*"[^"]*?([A-Z]+-\d+)', f.read())
+            if theirs and theirs.group(1) == code.group(0):
+                raise SystemExit(f'PROBLEM IN THE FORM FILE: form code {code.group(0)} is already used by {other}. '
+                                 "Give every form its own code, or the Bank's QR reader can't tell them apart.")
+
+
 def main(form_path):
     spec = load_form(form_path)
+    check_names(form_path, spec.FORM)
     check_form(spec.FORM, spec.DEFAULTS, FORMATS)    # stops with a plain-English message if the form file has a mistake
     pdf_bytes = build(spec.FORM, spec.DEFAULTS)
     result = self_check(pdf_bytes, spec)             # stops with the reason if the PDF isn't right

@@ -7,6 +7,8 @@ lc-form/
   lc_form.py        <- THE LC FORM. To change the LC form, edit this file only.
   example_form.py   <- a small example. Copy it to start a new form.
   eblc_form.py      <- a 5-section demo (Export Bills under LC): every kind of mandatory rule.
+  dc_amendment_form.py <- draft LC amendment form (Form LC-02).
+                       Every *_form.py file has the same parts in the same order (see "Make a similar form").
   build.py          <- RUN THIS:  python build.py lc_form.py
   layout.py         \
   pdf_writer.py      > the engine: the same for every form. Never edit these.
@@ -112,8 +114,18 @@ The kinds of question: `text` (one line), `long` (paragraph), `date`, `radio` (p
 
 1. Copy `example_form.py` to a new name that **ends in `_form.py`**, e.g. `trade_loan_form.py`, in the same folder.
    (Copy `lc_form.py` instead if the new form is close to the LC form.)
-2. Open it and change the parts marked `CHANGE`: the title, the issuer, the form code (e.g. `Form TL-01`; it must be
-   different from every other form's), the sections and questions, `DEFAULTS` and `PDF_NAME`.
+2. Open it. Every form file has the same parts, in this order, and the same "WHAT YOU CAN CHANGE" list at the top:
+   ```
+   """what the form is, how to build it, WHAT YOU CAN CHANGE"""
+   from build import CURRENCIES, answered, ...     <- the same line in every form file: don't change it
+   FORM = {"title", "note", "issuer", "formCode", "sections": [ section(...), ... ]}
+   DEFAULTS = {...}                                  <- answers filled in when the form opens ({} for none)
+   PDF_NAME = "..."                                  <- the PDF's file name in out/
+   PAGES = 4                                         <- optional: the most pages the form may have
+   ```
+   Change the title, the issuer, the **form code** first (e.g. `Form TL-01`: the build refuses a code another form
+   already uses, because the Bank's QR reader finds the form by it), then the sections and questions, `DEFAULTS` and
+   `PDF_NAME`. The currency list is shared: use `options=CURRENCIES` in any form.
 3. Build it: `python build.py trade_loan_form.py`. The PDF appears in `out/`.
 
 Every form automatically gets the same features: red mandatory boxes, locking of questions that don't apply,

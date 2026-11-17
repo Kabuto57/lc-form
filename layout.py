@@ -55,8 +55,7 @@ SECTION_GAP = 5             # gap between sections
 INDENT = 14                 # follow-up questions are indented under the tick box that switches them on
 SIGN_OFF = 46               # height of the signature / date / company stamp lines
 
-# 13.2 is the only question placed by hand, to match the approved 4-page copy of the form:
-# its label sits beside a fixed-width box, this far after the label.
+# A question with beside=<width> in the form file: its label sits beside a box of that width, this far after the label.
 BESIDE_GAP = 14.7
 
 # ---- Answer formats: (keys refused while typing, what a whole answer must look like, message if it doesn't)
@@ -357,7 +356,7 @@ class Layout:
             return 13
 
         # A one-line box with its label beside it: "Name: [          ]".
-        # 13.2 uses `beside` (a fixed box width, set in the form file) to match the approved 4-page copy.
+        # beside=<width> in the form file fixes the box width and keeps the label beside it.
         beside = q.get("beside")
         if beside or (labels_beside and self.can_label_beside(q, w)):
             label_w = self.inline_label_width(q)
@@ -655,7 +654,7 @@ class Layout:
             self.text("Company stamp", inner_x + inner_w - 146, self.top - 39, 7, color=GREY)
             self.top -= SIGN_OFF
 
-        # The approved 4-page copy ends the Drafts section (the one with 13.2) 3 points higher than the others.
+        # A section with a beside= question ends 3 points higher than the others (keeps its row spacing even).
         self.top -= -2 if any(q.get("beside") for q in section["fields"]) else 1
         if bottom is not None:
             self.top = min(self.top, bottom)
