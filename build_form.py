@@ -17,7 +17,6 @@ HOW IT FITS TOGETHER
                    STEP 2  add the scripts ───── the rules engine, buttons and QR code rows
                    STEP 3  write the PDF ─────── pikepdf turns it all into a real PDF
                    CHECK   open the result and check it question by question
-                   DOCS    rewrite the README parts that come from the form (question tables, counts, defaults)
                         ▼
     out/LC-Application.pdf
                         │  inside the PDF, Acrobat runs (the scripts in Appendix A):
@@ -34,8 +33,7 @@ CONTENTS OF THIS FILE
     7. Step 3: write the PDF                                         (class Writer)
     8. Build: run the three steps                                    (build)
     9. Self-check: open the built PDF and check it                   (self_check)
-   10. Documentation: keep the README in step with the form          (update_readme)
-   11. Run: load the form file, build, check, save                   (main)
+   10. Run: load the form file, build, check, save                   (main)
     Appendix A. The scripts that run inside Acrobat                  (DOCUMENT_JS, BUTTON_JS)
     Appendix B. Font measurements                                    (METRICS)
 
@@ -1320,99 +1318,13 @@ def self_check(pdf_bytes, spec):
 
 
 # ====================================================================================================================
-# 10. DOCUMENTATION: KEEP THE README IN STEP WITH THE FORM
-# ====================================================================================================================
-# The README's question tables, counts and starting answers come straight from the form file, so every build rewrites them.
-# They sit between invisible markers in README.md:  <!-- AUTO:name ... -->  ...  <!-- /AUTO:name -->
-# Everything else in the README is written by hand.
-
-KIND_NAMES = {"text": "text", "long": "paragraph", "date": "date", "radio": "pick one", "checks": "tick any",
-              "check": "tick box", "select": "drop-down"}
-
-
-def question_numbers(form):
-    return {q["id"]: f"{si + 1}.{qi + 1}" for si, s in enumerate(form["sections"]) for qi, q in enumerate(s["fields"])}
-
-
-def rule_text(rule, form, numbers):
-    """A rule in words: "13.1 is ticked", "13.3 = "Term"", "10.3 is picked"."""
-    kinds = {q["id"]: q["kind"] for s in form["sections"] for q in s["fields"]}
-    n = numbers[rule["field"]]
-    if kinds[rule["field"]] == "check":
-        return f"{n} is ticked"
-    if rule.get("not"):
-        return f"{n} is picked"
-    return f"{n} = " + " or ".join(f'"{v}"' for v in rule["values"])
-
-
-def question_tables(form):
-    """One table per section: number, field name, question, type and options, when mandatory, max length, format."""
-    numbers = question_numbers(form)
-    short = lambda text: text if len(text) <= 70 else text[:67] + "..."
-    out = []
-    for si, section in enumerate(form["sections"]):
-        out.append(f"**{si + 1}. {section['title']}**{' (bank use only)' if section.get('bankOnly') else ''}\n")
-        out.append("| No. | Field | Question | Type | Mandatory | Max | Format |\n|---|---|---|---|---|---|---|")
-        for q in section["fields"]:
-            options = q.get("options")
-            choices = "" if not options else f": {len(options)} options ({', '.join(options[:3])}, ...)" if len(options) > 12 \
-                else ": " + " / ".join(options)
-            unlocked = " or ".join(rule_text(r, form, numbers) for r in active_rules(q)) if q.get("activeIf") else ""
-            if q.get("required"):
-                mandatory = "**always**"
-            elif q.get("requiredIf"):
-                mandatory = "when " + " or ".join(rule_text(r, form, numbers) for r in q["requiredIf"])
-            else:
-                mandatory = f"no (unlocked when {unlocked})" if unlocked else "no"
-            out.append(f"| {numbers[q['id']]} | `{q['id']}` | {short(q['label'])} | {KIND_NAMES[q['kind']]}{choices} | "
-                       f"{mandatory} | {q.get('max', '')} | {q.get('format', '')} |")
-        out.append("")
-    return "\n".join(out).rstrip("\n")
-
-
-def defaults_text(form, defaults):
-    """The starting answers as a list: "- 2.1 Mode of advising: **Full Swift**"."""
-    numbers, by_id = question_numbers(form), {q["id"]: q for s in form["sections"] for q in s["fields"]}
-    short = lambda text: text if len(text) <= 60 else text[:57] + "..."
-    return "\n".join(f"- {numbers[k]} {short(by_id[k]['label'])}: **{'ticked' if v is True else v}**" for k, v in defaults.items())
-
-
-def update_readme(path, pdf_bytes, spec):
-    """Rewrites the generated blocks of the README at `path`. Returns the names of the blocks that changed."""
-    with open(path, encoding="utf-8") as f:
-        readme = f.read()
-    pdf = pikepdf.open(io.BytesIO(pdf_bytes))
-    question_count = sum(len(s["fields"]) for s in spec.FORM["sections"])
-    blocks = {
-        "summary": f"- {len(pdf.pages)} pages: {len(pdf.pages) - 1} pages of questions, plus the QR code page.\n"
-                   f"- {len(pdf.Root.AcroForm.Fields)} PDF fields: {question_count} questions, plus date lists, tick-any boxes, "
-                   f"buttons and the rows of two QR codes (177 each).",
-        "defaults": defaults_text(spec.FORM, spec.DEFAULTS),
-        "questions": question_tables(spec.FORM),
-    }
-    changed = []
-    for name, text in blocks.items():
-        pattern = re.compile(rf"(<!-- AUTO:{name} [^>]*-->\n)(.*?)(\n<!-- /AUTO:{name} -->)", re.S)
-        match = pattern.search(readme)
-        assert match, f"README.md is missing the <!-- AUTO:{name} --> markers"
-        if match.group(2) != text:
-            readme = readme[:match.start(2)] + text + readme[match.end(2):]
-            changed.append(name)
-    if changed:
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(readme)
-    return changed
-
-
-# ====================================================================================================================
-# 11. RUN: LOAD THE FORM FILE, BUILD, CHECK, SAVE, UPDATE THE README
+# 10. RUN: LOAD THE FORM FILE, BUILD, CHECK, SAVE
 # ====================================================================================================================
 # python build_form.py lc.py  reads these names from the form file:
 #   FORM       the form: title, note, issuer, formCode, sections (required)
 #   DEFAULTS   answers already filled in when the form opens (optional)
 #   PDF_NAME   the file to write in out/ (optional; default: the title, e.g. "Irrevocable-Documentary-Credit.pdf")
 #   PAGES      the number of pages the form must fit on; the build stops if it doesn't (optional)
-#   README     a README whose <!-- AUTO:... --> blocks are rewritten from the form (optional)
 # The PDF, and a small page for viewing it (out/index.html), go in out/ beside the form file.
 # To view it in a browser:  python -m http.server 8090 -d out   ->  http://localhost:8090
 
@@ -1426,7 +1338,6 @@ def load_form(path):
     spec.DEFAULTS = getattr(spec, "DEFAULTS", {})
     spec.PDF_NAME = getattr(spec, "PDF_NAME", re.sub(r"\W+", "-", spec.FORM["title"]).strip("-") + ".pdf")
     spec.PAGES = getattr(spec, "PAGES", None)
-    spec.README = getattr(spec, "README", None)
     return spec
 
 
@@ -1454,10 +1365,6 @@ def main(form_path):
         f.write(index_html(spec.FORM["title"], spec.PDF_NAME))
     print(f"Wrote out/{spec.PDF_NAME}")
     print(result)
-    if spec.README:
-        readme = os.path.join(os.path.dirname(os.path.abspath(form_path)), spec.README)
-        changed = update_readme(readme, pdf_bytes, spec)
-        print(f"{spec.README}: updated " + ", ".join(changed) if changed else f"{spec.README}: already up to date")
 
 
 # ====================================================================================================================

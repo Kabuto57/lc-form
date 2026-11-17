@@ -184,7 +184,6 @@ DEFAULTS = {
     "debit_issuance_charges": True,
 }
 
-# How the build handles this form (all optional, see build_form.py section 11).
+# How the build handles this form (all optional, see build_form.py section 10).
 PDF_NAME = "LC-Application.pdf"   # written to out/
 PAGES = 4                          # the approved layout: 3 pages of questions plus the QR code page
-README = "README.md"               # its question tables, counts and starting answers are rewritten on every build

@@ -3,10 +3,8 @@
 This project builds one PDF: the **Irrevocable Documentary Credit Application** (Demo Bank, Form LC-01 · v1.0 · Nov 2026).
 It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It's built in **Python**.
 
-<!-- AUTO:summary (written by build_form.py from lc.py; don't edit by hand) -->
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 477 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and the rows of two QR codes (177 each).
-<!-- /AUTO:summary -->
 
 - Needs Python 3.9 or later and **one library, pikepdf**. All its licences are permissive (no GPL/AGPL).
 - **Two files build it:** `lc.py` (what the form asks) and `build_form.py` (how a form becomes a PDF). Nothing else is
@@ -26,12 +24,10 @@ python3 -m venv .venv
 On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`.
 
 `build_form.py` checks the PDF before saving it. If anything is wrong (a missing field, a broken rule, a damaged
-file), it stops with the reason and doesn't save a broken PDF. It then brings this README up to date (see below).
+file), it stops with the reason and doesn't save a broken PDF.
 
-**This README keeps itself up to date.** The parts that come straight from `lc.py` (the page and field counts, the
-starting answers, and the table of every question) are rewritten by every build. They sit between invisible
-`<!-- AUTO:... -->` markers, so don't edit those parts by hand: change `lc.py` and rebuild. Everything else is written
-by hand, and is updated whenever the project changes.
+**This README is written by hand.** The page and field counts, the starting answers and the table of every question
+below describe `lc.py`: when you change the form, update them here too.
 
 **Use Acrobat or Reader to test the form.** The browser's PDF viewer (Chrome, Edge) shows and fills the form, but it
 doesn't run most of the Acrobat JavaScript. So in a browser you won't get the red boxes, locking, Check form or the
@@ -42,7 +38,7 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
 ```
                  ┌──────────────────────────────────────────────────────────────┐
   lc.py          │ THE FORM (what it asks): 108 questions, options and rules    │  ← you edit this
-  (form file)    │ FORM, DEFAULTS, and the settings PDF_NAME, PAGES, README     │
+  (form file)    │ FORM, DEFAULTS, and the settings PDF_NAME, PAGES             │
                  └──────────────────────────────┬───────────────────────────────┘
                                                 ▼  python build_form.py lc.py
                  ┌──────────────────────────────────────────────────────────────┐
@@ -52,7 +48,6 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
                  │ STEP 2  Add the scripts, buttons, QR code rows               │
                  │ STEP 3  Write the PDF with pikepdf                           │
                  │ CHECK   Open the result, check it question by question       │
-                 │ DOCS    Rewrite this README's question tables and counts     │
                  │ Appendix A  the JavaScript stored in the PDF                 │
                  │ Appendix B  Helvetica letter widths                          │
                  └──────────────────────────────┬───────────────────────────────┘
@@ -79,8 +74,8 @@ files are all there is, and the build checks that the scripts, buttons and QR ro
 
 | File | Purpose |
 |---|---|
-| `lc.py` | **The form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and three build settings (`PDF_NAME`, `PAGES`, `README`). The only file you change for wording or rules. |
-| `build_form.py` | **The builder.** Works for any form file. Lays out the pages, adds the scripts and buttons, writes the PDF, checks it, and updates this README. Contains the JavaScript (Appendix A) and the font measurements (Appendix B). One file in numbered sections, with a contents list at the top. |
+| `lc.py` | **The form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). The only file you change for wording or rules. |
+| `build_form.py` | **The builder.** Works for any form file. Lays out the pages, adds the scripts and buttons, writes the PDF and checks it. Contains the JavaScript (Appendix A) and the font measurements (Appendix B). One file in numbered sections, with a contents list at the top. |
 | `requirements.txt` | The one library (pikepdf) and its three dependencies, at exact versions. |
 | `README.md` | This guide. |
 
@@ -97,8 +92,7 @@ files are all there is, and the build checks that the scripts, buttons and QR ro
 | 7. Step 3: write the PDF | Turns everything into PDF objects with pikepdf | (rarely) |
 | 8. Build | Runs the three steps | (rarely) |
 | 9. Self-check | Opens the built PDF and checks every question's fields, flags, limits, defaults and rules | (rarely) |
-| 10. Documentation | Rewrites this README's question tables, counts and starting answers from the form | Change how those tables look |
-| 11. Run | Loads the form file, builds, checks, saves, updates the README | (rarely) |
+| 10. Run | Loads the form file, builds, checks, saves | (rarely) |
 | Appendix A | The JavaScript Acrobat runs: `DOCUMENT_JS` (rules engine, QR text, QR encoder) and `BUTTON_JS` (one entry per button) | Change how the form checks answers, or what a button does |
 | Appendix B | Adobe's Helvetica letter widths (`METRICS`) | Never |
 
@@ -216,24 +210,19 @@ A wrong whole answer gets an alert when you leave the box, and the box refuses i
 
 ### Defaults when the form opens
 
-<!-- AUTO:defaults (written by build_form.py from lc.py; don't edit by hand) -->
 - 2.1 Mode of advising: **Full Swift**
 - 11.2 Presentation period (days after shipment): **21**
 - 17.1 All bank charges are for account of: **ticked**
 - 17.2 Charges for account of: **Beneficiary, except charges at DC Issuing Bank's counter**
 - 17.5 Please provide us with post-shipment financing under Docu...: **ticked**
 - 17.11 Please debit all DC issuance charges to our account with you: **ticked**
-<!-- /AUTO:defaults -->
 
 ### Every question
-
-(Written by the build from `lc.py`.)
 
 "Mandatory" says **always**, **when** a condition holds, or **no**. A question with a "when" condition is also locked
 until that condition holds, except for 10.4 and 10.7, which are never locked. "Unlocked when" means the question only
 applies then, but stays optional.
 
-<!-- AUTO:questions (written by build_form.py from lc.py; don't edit by hand) -->
 **1. Application**
 
 | No. | Field | Question | Type | Mandatory | Max | Format |
@@ -431,7 +420,6 @@ applies then, but stays optional.
 | No. | Field | Question | Type | Mandatory | Max | Format |
 |---|---|---|---|---|---|---|
 | 18.1 | `authorised_person` | Name and title of authorised person(s) | text | no |  |  |
-<!-- /AUTO:questions -->
 
 ## The JavaScript inside the PDF
 
@@ -550,8 +538,8 @@ text("term_days", "Term: days", requiredIf=when("drafts_at", "Term"), format="nu
 
 This line makes a half-width text box named `term_days`, labelled "Term: days". It's mandatory (and unlocked) only
 when Drafts at = Term, and it takes digits only. Every kind of question and every option is listed in
-`build_form.py` section 1. The layout, numbering, scripts, QR code and this README's question table all follow from
-these lines. Then run `python build_form.py lc.py` (it checks itself and updates the README).
+`build_form.py` section 1. The layout, numbering, scripts, and QR code all follow from
+these lines. Then run `python build_form.py lc.py` (it checks itself). If you changed a question, update its row in [Every question](#every-question) below.
 
 If the build stops with `expected 4 pages`, the change made the form longer than the approved layout: shorten it,
 or change `PAGES` in `lc.py` if a longer form is approved.
@@ -561,8 +549,8 @@ or change `PAGES` in `lc.py` if a longer form is approved.
 1. Copy `lc.py` to a new name, e.g. `leave_form.py`, in the same folder as `build_form.py`.
 2. Keep the `from build_form import ...` line. Replace the sections and questions, and set `FORM` (title, note,
    issuer, formCode such as `"Form HR-07 · v1.0 · Nov 2026"`) and `DEFAULTS` (or delete `DEFAULTS`).
-3. At the end, set `PDF_NAME` (or delete it: the file is then named after the title), and delete `PAGES` and
-   `README` unless you want a fixed page count or a README kept up to date.
+3. At the end, set `PDF_NAME` (or delete it: the file is then named after the title), and delete `PAGES`
+   unless you want a fixed page count.
 4. Run `python build_form.py leave_form.py`. The PDF goes in `out/`, and the build prints PASS or the reason it stopped.
 
 A small form looks like this:
@@ -638,3 +626,7 @@ Print Form. (This example builds a 2-page PDF with 373 fields; 354 of them are t
     buttons at the bottom; a single code is therefore smaller than before (111 mm instead of 159 mm). 477 fields
     instead of 297. Tested: 34 script tests pass, and both codes scan (also from a rendered page) and join back
     into the exact JSON.
+11. **README no longer updated by the build.** `build_form.py` doesn't rewrite this README any more (its
+    documentation section and the `README` setting in `lc.py` are gone), so a build only writes `out/`. The question
+    tables, counts and starting answers below are now plain text, written by hand: update them when the form
+    changes. The PDF is unchanged.
