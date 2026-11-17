@@ -62,13 +62,8 @@ import sys
 #     width="half"                        half the page; two half sections in a row sit side by side
 #                                         (leave width out: the build puts two short, similar sections side by side)
 #     new_page=True                       starts on a new page
-# The look of one form (optional, at the end of the form file; everything left out keeps its usual value):
-#     STYLE = {"ACCENT": (0, 0.3, 0.6),     header line, question numbers, buttons (red, green, blue; each 0 to 1)
-#              "TINT": (0.85, 0.9, 0.95),   grey band behind each section heading
-#              "BANK_SHADE": (0.95, 0.95, 0.95),  background of the "For Bank Use Only" section
-#              "LABEL": 7.5,                size of the question labels
-#              "TEXT": 8.5}                 size of the answers, options and tick-box wording
-#     To change these for EVERY form, change them in layout.py, section 1, instead.
+# Leave width, new_page and cols out and layout.py decides (usually best). Colours and text sizes are the same on
+# every form (red = mandatory): they are set in layout.py, section 1.
 #
 # Mistakes in a form file (a misspelt option, a rule pointing at a question that doesn't exist, two questions with
 # the same id ...) are caught by check_form, at the end of this file, before anything is built.
@@ -213,31 +208,8 @@ def load_form(path):
     spec.DEFAULTS = getattr(spec, "DEFAULTS", {})
     spec.PDF_NAME = getattr(spec, "PDF_NAME", re.sub(r"\W+", "-", spec.FORM["title"]).strip("-") + ".pdf")
     spec.PAGES = getattr(spec, "PAGES", None)
-    spec.STYLE = getattr(spec, "STYLE", {})
     return spec
 
-
-STYLE_COLOURS, STYLE_SIZES = ("ACCENT", "TINT", "BANK_SHADE"), ("LABEL", "TEXT")
-
-
-def apply_style(style):
-    """Applies the form file's STYLE (its own colours and text sizes) on top of layout.py's settings."""
-    import layout
-    import pdf_writer
-    for key, value in style.items():
-        if key in STYLE_COLOURS:
-            if not (isinstance(value, (tuple, list)) and len(value) == 3 and all(isinstance(c, (int, float)) and 0 <= c <= 1 for c in value)):
-                raise SystemExit(f'PROBLEM IN THE FORM FILE: STYLE "{key}" must be (red, green, blue), each 0 to 1, like (0, 0.3, 0.6).')
-            value = tuple(value)
-        elif key in STYLE_SIZES:
-            if not (isinstance(value, (int, float)) and 5 <= value <= 14):
-                raise SystemExit(f'PROBLEM IN THE FORM FILE: STYLE "{key}" must be a text size from 5 to 14, like 8.5.')
-        else:
-            raise SystemExit(f'PROBLEM IN THE FORM FILE: STYLE has an unknown setting "{key}". Allowed: '
-                             f'{", ".join(STYLE_COLOURS + STYLE_SIZES)}.')
-        setattr(layout, key, value)
-        if hasattr(pdf_writer, key):   # pdf_writer keeps its own copy of some settings
-            setattr(pdf_writer, key, value)
 
 
 def index_html(title, pdf_name):
@@ -255,7 +227,6 @@ def index_html(title, pdf_name):
 def main(form_path):
     spec = load_form(form_path)
     check_form(spec.FORM, spec.DEFAULTS, FORMATS)    # stops with a plain-English message if the form file has a mistake
-    apply_style(spec.STYLE)
     pdf_bytes = build(spec.FORM, spec.DEFAULTS)
     result = self_check(pdf_bytes, spec)             # stops with the reason if the PDF isn't right
     out_dir = os.path.join(HERE, "out")

@@ -33,8 +33,9 @@ WHAT YOU CAN CUSTOMISE (all in this file; every option is also listed in build.p
                           format="amount"                   amount / number / phone / account
                           cols=12                           width out of 12 columns: 12 whole row, 6 half, 4 a third
                                                             (no cols: the build picks from the label and max)
-    THE LOOK            STYLE = {...} at the end of the file: colours and text sizes for this form only.
-                        To change them for EVERY form: layout.py, section 1.
+    LEFT OUT            width, new_page and cols are only for when you want something different: without them
+                        layout.py lays the form out by itself. Colours and text sizes are the same on every form
+                        (red = mandatory) and are not set here.
     NOT IN THIS FILE    checks that compare two answers (e.g. a date must be after another): acrobat_js.py
                         (across) and read_qr.py (checks_across), kept the same.
 """
@@ -121,13 +122,3 @@ DEFAULTS = {
 }
 
 PDF_NAME = "EBLC-Application.pdf"   # written to out/
-
-# The look of this form only (optional; delete the # at the start of each line to try it). Colours are
-# (red, green, blue), each 0 to 1. Anything left out keeps its usual value from layout.py, section 1.
-# STYLE = {
-#     "ACCENT": (0, 0.3, 0.6),          # header line, question numbers, buttons (usual: black)
-#     "TINT": (0.85, 0.9, 0.95),        # band behind each section heading (usual: light grey)
-#     "BANK_SHADE": (0.95, 0.95, 0.95), # background of a "For Bank Use Only" section
-#     "LABEL": 7.5,                     # size of the question labels
-#     "TEXT": 8.5,                      # size of the answers, options and tick-box wording
-# }

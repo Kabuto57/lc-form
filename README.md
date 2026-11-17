@@ -106,7 +106,6 @@ put a file in the wrong place.
 |---|---|
 | A question's wording, options, mandatory rule, max length or format | `lc_form.py` |
 | How wide a section is, or start it on a new page | `width="full"` / `width="half"` / `new_page=True` on its `section(...)` in the form file |
-| One form's colours and text sizes | `STYLE = {...}` at the end of the form file (all forms: `layout.py`, section 1) |
 | How wide one question is (e.g. a whole row) | add `cols=12` (or `cols=6` for half) to its line in the form file |
 | Add or remove a question | `lc_form.py` (nothing else: the checks follow the form) |
 | The number of pages the form must fit on | `PAGES` in `lc_form.py` |
@@ -696,3 +695,6 @@ layout: box widths are worked out from the label and `max`.
     build with a plain message; a signoff section can't be half. Every form file now starts with a "WHAT YOU CAN
     CUSTOMISE" list. `eblc_form.py` uses full and half sections and now fits on one page plus the QR page. The LC
     and example forms build byte-identical PDFs.
+20. **No per-form colours.** `STYLE` (added in 19) is removed: a simple form doesn't need it, and every form keeps
+    the same look (red = mandatory). Colours and text sizes stay in `layout.py`, section 1. `width`, `new_page` and
+    `cols` stay, as optional overrides only: without them `layout.py` decides.
