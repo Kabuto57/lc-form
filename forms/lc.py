@@ -1,19 +1,26 @@
-"""THE FORM: the Irrevocable Documentary Credit (LC) application, Form LC-01.
+"""THE LC APPLICATION FORM (Irrevocable Documentary Credit Application, Form LC-01).
 
-This file says WHAT the form asks; build_form.py turns it into the PDF:   python build_form.py lc.py
+This file says WHAT the form asks. To make the PDF, run (from the lc-form folder):
+    python build.py forms/lc.py          -> out/LC-Application.pdf
+If you made a mistake in this file, the build stops and tells you which question and what is wrong.
 
-Each question is one line, made with the helpers from build_form.py (section 1 there lists every kind and option).
-For example
-    text("term_days", "Term: days", requiredIf=when("drafts_at", "Term"), format="number"),
-is a half-width text box named term_days, labelled "Term: days", mandatory (and unlocked) only when
-Drafts at = Term, digits only. The layout, numbering, scripts and QR code all follow from these lines.
-
-To make a new form: copy this file, keep the import line, and change the questions, FORM, DEFAULTS and the settings
-at the end.
+QUICK CHEAT SHEET (every kind and option: engine/questions.py, top of the file; step by step: GUIDE.md)
+    Change wording            edit the text in quotes:   text("applicant_name", "Applicant name", ...)
+    Make mandatory            add  required=True
+    Mandatory only if ...     add  requiredIf=ticked("drafts")   or   requiredIf=when("drafts_at", "Term")
+    Limit the length          add  max=35
+    Digits / amount only      add  format="number"   or   format="amount"
+    Add a question            copy a similar line, give it a NEW id (letters, digits, _), change the label
+    Remove a question         delete its line (and any requiredIf / activeIf / DEFAULTS that mention its id)
+    Change an option list     edit the list:   radio("price_basis", "Price basis", ["FOB", "CFR", "CIF", ...])
+    Add a section             copy a whole  section("...", fields=[ ... ]),  block and change it
+    Starting answers          DEFAULTS at the end of this file
+The id (first word in quotes) is the field's name in the PDF and in the QR code: don't change it lightly, the
+Bank's system reads it.
 """
 
 
-from build_form import answered, check, checks, date, long, radio, section, select, text, ticked, when
+from engine.questions import answered, check, checks, date, long, radio, section, select, text, ticked, when
 
 # ISO 4217 currency codes, common trade currencies first.
 CURRENCIES = ["SGD", "USD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD", "NZD", "CAD", "CHF", "MYR", "IDR", "THB", "INR", "KRW", "TWD", "PHP", "VND", "AED", "SAR", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AWG", "AZN", "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", "CDF", "CLP", "COP", "CRC", "CUC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "FJD", "FKP", "GEL", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HNL", "HRK", "HTG", "HUF", "ILS", "IQD", "IRR", "ISK", "JMD", "JOD", "KES", "KGS", "KHR", "KMF", "KPW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "OMR", "PAB", "PEN", "PGK", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SBD", "SCR", "SDG", "SEK", "SHP", "SLE", "SOS", "SRD", "SSP", "STN", "SVC", "SYP", "SZL", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TZS", "UAH", "UGX", "UYU", "UZS", "VES", "VUV", "WST", "XAF", "XCD", "XCG", "XDR", "XOF", "XPF", "XSU", "YER", "ZAR", "ZMW", "ZWG"]
@@ -184,6 +191,6 @@ DEFAULTS = {
     "debit_issuance_charges": True,
 }
 
-# How the build handles this form (all optional, see build_form.py section 10).
+# How the build handles this form (both optional, see build.py).
 PDF_NAME = "LC-Application.pdf"   # written to out/
 PAGES = 4                          # the approved layout: 3 pages of questions plus the QR code page
