@@ -2,22 +2,21 @@
 
 Build it:   python build.py example_form.py     -> out/Annual-Leave-Request.pdf
 
-To start a new form: copy this file to a new name ending in _form.py (e.g. trade_loan_form.py), in the same
-folder, then change the title, formCode, sections, DEFAULTS and PDF_NAME. Every form file has the same parts in
-the same order, so any form can be copied the same way.
+To start a new form: copy this file to a new name ending in _form.py (e.g. trade_loan_form.py), then change the parts marked
+"CHANGE". Every kind of question and every option is listed in section 1 of build.py. eblc_form.py shows the
+layout options in use (full / half sections, cols=).
 
-WHAT YOU CAN CHANGE (all in this file; the same list is in every form file and in build.py, section 1)
-    THE WHOLE FORM      FORM = {...}: "title", "note" (under the title), "issuer" (top of every page), "formCode"
-                        (footer and QR code: give every form its own code, e.g. "Form EB-01 · v1.0 · Nov 2026").
-                        DEFAULTS: answers filled in when the form opens.  PDF_NAME: the file name in out/.
-                        PAGES (optional): the build stops if the form doesn't fit on that many pages (QR page included).
+WHAT YOU CAN CUSTOMISE (all in this file; every option is also listed in build.py, section 1)
+    THE WHOLE FORM      FORM = {...}: "title", "note" (under the title), "issuer" (top of every page), "formCode" (footer
+                        and QR code). PDF_NAME (the file name). DEFAULTS (answers filled in when the form opens).
     A SECTION           section("Title", fields=[...], ...) plus any of:
+                          width="full"      the whole width of the page
+                          width="half"      half the page; two half sections in a row sit side by side
+                          (no width)        the build decides: two short, similar sections sit side by side
+                          new_page=True     starts on a new page
                           note="..."        text under the heading
                           bankOnly=True     shaded "For Bank Use Only" section
                           signoff=True      signature, date and company stamp lines (always the whole width)
-                          width="full"      the whole width of the page
-                          width="half"      half the page; two half sections in a row sit side by side
-                          new_page=True     starts on a new page
     A QUESTION          text / long / date / radio / checks / check / select (id, label, ...) plus any of:
                           required=True                     always mandatory (red *)
                           requiredIf=ticked("x")            mandatory (and unlocked) only when tick box x is ticked
@@ -27,23 +26,23 @@ WHAT YOU CAN CHANGE (all in this file; the same list is in every form file and i
                           max=35                            at most 35 characters (also sets the box width)
                           format="amount"                   amount / number / phone / account
                           cols=12                           width out of 12 columns: 12 whole row, 6 half, 4 a third
-                          beside=69.3                       label beside a box this wide, even when the label is long
-                          options=CURRENCIES                the shared currency list (in build.py)
+                                                            (no cols: the build picks from the label and max)
     LEFT OUT            width, new_page and cols are only for when you want something different: without them
                         layout.py lays the form out by itself. Colours and text sizes are the same on every form
                         (red = mandatory) and are not set here.
     NOT IN THIS FILE    checks that compare two answers (e.g. a date must be after another): acrobat_js.py
                         (across) and read_qr.py (checks_across), kept the same.
 """
-# Every form file starts with this same line: it brings in the words used below.
-from build import CURRENCIES, answered, check, checks, date, long, radio, section, select, text, ticked, when
+# Always keep this line: it brings in the words used below (text, date, radio ...).
+from build import check, date, long, radio, section, text, ticked, when
 
 FORM = {
-    "title": "Annual Leave Request",
-    "note": "Please complete in block letters.",
-    "issuer": "Demo Bank · HR",
-    "formCode": "Form HR-07 · v1.0 · Nov 2026",
-    "sections": [
+    "title": "Annual Leave Request",                 # CHANGE: shown at the top of page 1
+    "note": "Please complete in block letters.",     # CHANGE: the instruction under the title
+    "issuer": "Demo Bank · HR",                      # CHANGE: shown at the top of every page
+    "formCode": "Form HR-07 · v1.0 · Nov 2026",      # CHANGE: shown at the bottom of every page; "HR-07" and "1.0"
+                                                     #         also go into the QR code
+    "sections": [                                    # CHANGE: the sections, in order; each has its questions
         section("Employee", fields=[
             # text(id, label, ...): a one-line box. The id is the answer's name in the QR code: letters, digits, _
             text("name", "Full name", required=True, max=35),
@@ -65,8 +64,8 @@ FORM = {
     ],
 }
 
-# Answers already filled in when the form opens ({} for none).
+# CHANGE: answers already filled in when the form opens (or delete these lines).
 DEFAULTS = {"type": "Annual"}
 
-# The PDF's file name in out/.
+# CHANGE: the PDF's file name in out/ (or delete: it is then named after the title).
 PDF_NAME = "Annual-Leave-Request.pdf"

@@ -3,21 +3,26 @@
 Build it:   python build.py eblc_form.py     -> out/EBLC-Application.pdf
 
 An exporter (the LC's beneficiary) presents documents under an LC to the Bank for checking and negotiation.
-A starting point, to be checked with Trade Operations before use. Ids that mean the same as on the LC form
-(currency, amount ...) keep the same names, so the Bank's system reads them the same way.
+A starting point, to be checked with Trade Operations before use. 5 sections:
+    1. Exporter                  who is presenting, and the account to credit
+    2. Letter of Credit          the LC the documents are presented under
+    3. Documents Presented       which documents are enclosed, and how many
+    4. Instructions              discrepancies, proceeds, financing
+    5. Declaration and Signature
+Ids that mean the same as on the LC form (currency, amount ...) keep the same names, so the Bank's system reads
+them the same way. Step by step: GUIDE.md.
 
-WHAT YOU CAN CHANGE (all in this file; the same list is in every form file and in build.py, section 1)
-    THE WHOLE FORM      FORM = {...}: "title", "note" (under the title), "issuer" (top of every page), "formCode"
-                        (footer and QR code: give every form its own code, e.g. "Form EB-01 · v1.0 · Nov 2026").
-                        DEFAULTS: answers filled in when the form opens.  PDF_NAME: the file name in out/.
-                        PAGES (optional): the build stops if the form doesn't fit on that many pages (QR page included).
+WHAT YOU CAN CUSTOMISE (all in this file; every option is also listed in build.py, section 1)
+    THE WHOLE FORM      FORM = {...}: "title", "note" (under the title), "issuer" (top of every page), "formCode" (footer
+                        and QR code). PDF_NAME (the file name). DEFAULTS (answers filled in when the form opens).
     A SECTION           section("Title", fields=[...], ...) plus any of:
+                          width="full"      the whole width of the page
+                          width="half"      half the page; two half sections in a row sit side by side
+                          (no width)        the build decides: two short, similar sections sit side by side
+                          new_page=True     starts on a new page
                           note="..."        text under the heading
                           bankOnly=True     shaded "For Bank Use Only" section
                           signoff=True      signature, date and company stamp lines (always the whole width)
-                          width="full"      the whole width of the page
-                          width="half"      half the page; two half sections in a row sit side by side
-                          new_page=True     starts on a new page
     A QUESTION          text / long / date / radio / checks / check / select (id, label, ...) plus any of:
                           required=True                     always mandatory (red *)
                           requiredIf=ticked("x")            mandatory (and unlocked) only when tick box x is ticked
@@ -27,23 +32,24 @@ WHAT YOU CAN CHANGE (all in this file; the same list is in every form file and i
                           max=35                            at most 35 characters (also sets the box width)
                           format="amount"                   amount / number / phone / account
                           cols=12                           width out of 12 columns: 12 whole row, 6 half, 4 a third
-                          beside=69.3                       label beside a box this wide, even when the label is long
-                          options=CURRENCIES                the shared currency list (in build.py)
+                                                            (no cols: the build picks from the label and max)
     LEFT OUT            width, new_page and cols are only for when you want something different: without them
                         layout.py lays the form out by itself. Colours and text sizes are the same on every form
                         (red = mandatory) and are not set here.
     NOT IN THIS FILE    checks that compare two answers (e.g. a date must be after another): acrobat_js.py
                         (across) and read_qr.py (checks_across), kept the same.
 """
-# Every form file starts with this same line: it brings in the words used below.
-from build import CURRENCIES, answered, check, checks, date, long, radio, section, select, text, ticked, when
+from build import answered, check, date, long, radio, section, select, text, ticked, when
+from lc_form import CURRENCIES   # the same currency list as the LC form
 
 FORM = {
     "title": "Export Bills under Letter of Credit",
     "note": "Please complete in block letters. Dates are DD/MM/YYYY.",
     "issuer": "Demo Bank · Trade Services",
-    "formCode": "Form EB-01 · v0.1 · Nov 2026",
+    "formCode": "Form EB-01 · v0.1 · Nov 2026",   # "EB-01" goes into the QR code; read_qr.py uses it to find this file
     "sections": [
+
+        # 1. Who is presenting
         section("Exporter", width="full", fields=[
             date("application_date", "Date", required=True),
             text("exporter_name", "Exporter name", required=True, max=35, cols=12),   # cols=12: the whole row (cols=6: half)
@@ -108,12 +114,11 @@ FORM = {
     ],
 }
 
-# Answers already filled in when the form opens ({} for none).
+# Answers already filled in when the form opens.
 DEFAULTS = {
     "tenor": "Sight",
     "charges_for": "Exporter",
     "discrepancy_instruction": "Send to the issuing bank for approval",
 }
 
-# The PDF's file name in out/.
-PDF_NAME = "EBLC-Application.pdf"
+PDF_NAME = "EBLC-Application.pdf"   # written to out/
