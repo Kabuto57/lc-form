@@ -3,4 +3,5 @@
 pikepdf==10.18.1   # writes the PDF (MPL-2.0; bundles qpdf, Apache-2.0)
 lxml==6.1.3        # needed by pikepdf (BSD-3-Clause)
 packaging==26.3    # needed by pikepdf (Apache-2.0 / BSD-2-Clause)
-pillow==13.0.0     # needed by pikepdf (MIT-CMU)
+pillow==13.0.0     # needed by pikepdf (MIT-CMU); also opens the scanned images in read_qr.py
+zxing-cpp==3.1.1   # reads the QR codes in read_qr.py (Apache-2.0; no other dependencies). Not needed to build

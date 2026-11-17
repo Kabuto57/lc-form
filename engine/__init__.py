@@ -11,6 +11,7 @@
                                    │        buttons.js    Check form, Reset form, Generate QR Code, Print Form, before save
                                    ├─ writer.py     STEP 3  pikepdf writes the real PDF
                                    └─ check.py      opens the result and checks it before it is saved
+    read_qr.py ──► validate.py   the Bank's side: re-checks the answers read from the QR code(s)
     Shared by the steps:
         look.py    page size, colours, text sizes, spacing, answer formats   (change the look of every form here)
         text.py    safe characters, measuring and wrapping text

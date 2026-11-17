@@ -6,7 +6,7 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 477 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and the rows of two QR codes (177 each).
 
-- Needs Python 3.9 or later and **one library, pikepdf**. All its licences are permissive (no GPL/AGPL).
+- Needs Python 3.9 or later and **one library to build, pikepdf** (plus zxing-cpp to read QR codes). All its licences are permissive (no GPL/AGPL).
 - **New to this? Read [GUIDE.md](GUIDE.md) first.** It shows, step by step, how to change the form and how to make a
   similar one, without needing to know Python.
 - **You edit one file: the form** (`forms/lc.py`). The `engine/` folder turns any form file into a PDF; you don't
@@ -62,7 +62,7 @@ QR code. Download the PDF and open it in Acrobat. If a yellow bar appears, enabl
   out/           │ LC-Application.pdf   the finished form (4 pages)             │
                  │ index.html           a page to view it locally               │
                  └──────────────────────────────┬───────────────────────────────┘
-                                                ▼  opened in Adobe Acrobat / Reader
+                                                ▼  opened in Adobe Acrobat / Reader, filled in, printed
                  ┌──────────────────────────────────────────────────────────────┐
   engine/js/     │ document.js  rules engine (red boxes, locking, checks),      │
   (stored inside │              QR code text, QR code encoder                   │
@@ -83,16 +83,18 @@ rather than make a PDF without its scripts.
 |---|---|---|
 | `forms/lc.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). | Anyone changing the form |
 | `forms/example_leave.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form. | Anyone making a new form |
+| `read_qr.py` | **Reads the QR code(s)** from scanned images (or text from a handheld scanner), joins two codes, re-checks every answer against the form, and saves the result as JSON in `out/`. See [Reading the QR codes](#reading-the-qr-codes). | The Bank's side |
 | `build.py` | **Run this.** Loads a form file, checks it, builds the PDF, checks the PDF, saves it in `out/`. | Run it; no need to open |
 | `GUIDE.md` | Step-by-step guide for beginners. | Everyone, first |
 | `README.md` | This reference. | When you need the details |
-| `requirements.txt` | The one library (pikepdf) and its three dependencies, at exact versions. | Setup |
+| `requirements.txt` | pikepdf and its three dependencies (to build), and zxing-cpp (to read QR codes), at exact versions. | Setup |
 | `engine/__init__.py` | The engine's front door: a map of the engine, and `build()`, which runs the three steps. | Developers |
 | `engine/questions.py` | The question helpers form files use (`text`, `radio`, `date`, `when`, `ticked` ...), the list of every option, and `check_form`, which explains mistakes in a form file. | To look up an option |
 | `engine/look.py` | Page size, colours, text sizes, spacing, answer formats (number, amount, phone, account). | To change the look of every form |
 | `engine/layout.py` | Step 1: where every section, question and box goes. | To change how questions are arranged |
 | `engine/scripts.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows. | To add or move a button |
 | `engine/writer.py` | Step 3: turns everything into PDF objects with pikepdf. | Rarely |
+| `engine/validate.py` | Re-checks scanned answers against the form file (used by `read_qr.py`). | To add a check across answers |
 | `engine/check.py` | Opens the built PDF and checks it before it's saved. | Rarely |
 | `engine/text.py`, `engine/rules.py` | Helpers: safe characters, measuring and wrapping text; "mandatory now?", "applies now?", the date list. | Rarely |
 | `engine/fonts.py` | Adobe's Helvetica letter widths (data). | Never |
@@ -121,6 +123,7 @@ rather than make a PDF without its scripts.
 | lxml (needed by pikepdf) | BSD-3-Clause | Not used by this project directly |
 | Pillow (needed by pikepdf) | MIT-CMU | Not used by this project directly |
 | packaging (needed by pikepdf) | Apache-2.0 or BSD-2-Clause | Not used by this project directly |
+| **zxing-cpp** (only for `read_qr.py`) | Apache-2.0 | Reads the printed QR codes from scanned images. Not needed to build the PDF |
 | Python standard library | PSF | Dates, JSON, compression, file handling, and `http.server` for local hosting |
 
 All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
@@ -517,6 +520,63 @@ Each code is 111 mm square: 177 × 177 squares of 0.6 mm.
 
 The bank scans the printed code (or both codes) with a QR reader and gets the JSON.
 
+## Reading the QR codes
+
+`read_qr.py` is the Bank's side: it reads the printed code(s) and checks the answers.
+
+```
+.venv/bin/python read_qr.py scan.png                 # one image with one or both codes
+.venv/bin/python read_qr.py page1.jpg page2.jpg      # codes in separate images, in any order
+.venv/bin/python read_qr.py scanned.txt              # text from a handheld scanner, one code per line
+```
+
+It prints `ACCEPTED` or `NOT ACCEPTED` with the reasons, and saves `out/LC-01-<date and time>.json`:
+
+```json
+{"form": "LC-01", "version": "1.0", "saved": "2026-11-17T09:50", "codes": 2, "accepted": true,
+ "problems": [], "warnings": [], "data": {"applicant_name": "TAN ENGINEERING PTE LTD", "...": "..."}}
+```
+
+What it does:
+1. **Reads every QR code** in the image(s) with zxing-cpp. PNG, JPG, BMP and TIFF (every page of a multi-page TIFF)
+   work. A scanner's PDF can't be read directly (reading PDFs as images needs another library): save the scan as an
+   image instead. Scan at 300 dpi or more.
+2. **Joins two codes.** The order is the one that makes valid JSON (code 1 of 2 always starts the JSON), so the
+   images can be given in any order. If only one of two codes is found, it says "Scan both". The same code
+   scanned twice counts once.
+3. **Finds the form** in `forms/` whose form code matches the QR code's `"form"` (e.g. `LC-01`), and warns if the
+   form version differs.
+4. **Re-checks every answer** (`engine/validate.py`), because a QR code comes from outside the Bank and could have
+   been made or edited by anyone: unknown answers, wrong kinds of value, options that don't exist, lengths over
+   max, formats and dates, characters the form doesn't allow, mandatory questions left blank, answers to locked
+   questions, and the checks across answers (expiry after shipment, and so on). "In the future" is measured from
+   when the code was made.
+5. **Warns** (without refusing) if paragraphs were shortened to fit (`"truncated"`), or if the form itself said it
+   wasn't complete.
+
+Exit status 0 means accepted and 1 means not, so another program (the Bank's workbench) can run it and read the
+JSON.
+
+### Which library reads the codes, and why
+
+| Option | Licence | Two codes (structured append) | Notes |
+|---|---|---|---|
+| **zxing-cpp** (used here) | Apache-2.0 | reads each code; `read_qr.py` joins them | The C++ version of Google's ZXing, the most widely used open-source barcode reader (its Java original is in many Android apps). Reads dense version 40 codes, tilted and blurred scans. Prebuilt for Windows, Mac and Linux, no dependencies. Actively maintained. |
+| ZBar / pyzbar | LGPL-2.1 | no | Older, rarely updated, weaker on dense codes. LGPL is more restrictive. |
+| OpenCV QR reader | Apache-2.0 | no | A large library (about 100 MB) for one job; less reliable on version 40 codes. |
+| Commercial SDKs (Dynamsoft, Scandit, Cognex ...) | paid | yes | What some banks buy for high-volume scanning, with vendor support. Worth it only at scale. |
+| Handheld 2D scanners (Honeywell, Zebra ...) | hardware | many models can join structured-append codes (check the model's manual) | Common at bank counters. They "type" the code's text into the computer: save it as a `.txt` file (one code per line) and use `read_qr.py scanned.txt`. |
+
+zxing-cpp's Python package doesn't report which code is "1 of 2", so `read_qr.py` works out the order from the
+text instead (only one order makes valid JSON). Tested: one code; both codes on a rendered page; two images in the
+wrong order; one of two codes only (refused, "Scan both"); a blank image; a page rescaled to 300 dpi, rotated
+1.5°, blurred, speckled and saved as a low-quality JPG (read and accepted); and a QR text with 9 planted mistakes
+(all 9 reported, not accepted).
+
+**Security.** The QR text is read only as JSON (never run), limited to the size two codes can hold, and every
+value is checked against the form before anything is accepted. zxing-cpp is native code that parses images: give
+it scans from the Bank's own scanners, and keep it at the pinned version (update it like pikepdf, see Security).
+
 ## Testing in Acrobat
 
 Every build checks the PDF's structure itself: every question's fields, the required flags, limits, starting
@@ -599,3 +659,7 @@ layout: box widths are worked out from the label and `max`.
     explains mistakes in plain words (misspelt options, rules naming unknown ids, duplicate ids, unknown formats,
     defaults that aren't an option, missing commas); `forms/example_leave.py`, a commented example to copy; and
     `GUIDE.md`, a step-by-step guide. The PDF is byte-for-byte identical to before, and all 34 script tests pass.
+13. **QR reader.** `read_qr.py` reads one or two QR codes from scanned images (or a handheld scanner's text),
+    joins them in the right order, re-checks every answer against the form file (`engine/validate.py`, the same
+    rules as the form, plus the checks across answers), and saves the result as JSON. New dependency: zxing-cpp
+    3.1.1 (Apache-2.0), only for reading.

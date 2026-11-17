@@ -9,6 +9,7 @@ lc-form/
     lc.py                     the LC application form
     example_leave.py          a small example to copy when you make a new form
   build.py                  ← YOU RUN THIS:  python build.py forms/lc.py
+  read_qr.py                  reads the QR code(s) from a scan:  python read_qr.py scan.png
   out/                      ← THE PDF APPEARS HERE
   engine/                     how a form becomes a PDF (no need to open)
   GUIDE.md                    this guide
@@ -94,7 +95,18 @@ The kinds of question: `text` (one line), `long` (paragraph), `date`, `radio` (p
 Every form automatically gets the same features: red mandatory boxes, locking of questions that don't apply,
 Check form and Reset form buttons, and the QR code page (one code, or two when the answers are long).
 
-## 3. When to ask a developer
+## 3. Read a filled-in form's QR code(s)
+
+Scan the printed QR code page (300 dpi, as PNG or JPG), then run:
+
+```
+.venv\Scripts\python read_qr.py scan.png              (Mac: .venv/bin/python read_qr.py scan.png)
+```
+
+If the form printed two codes, both can be in one scan, or give two images: `read_qr.py page1.png page2.png`.
+It prints `ACCEPTED`, or `NOT ACCEPTED` with what is wrong, and saves the answers as a `.json` file in `out/`.
+
+## 4. When to ask a developer
 
 Ask someone who knows Python if you want to change **how every form looks or works** rather than what one form
 asks: colours and sizes (`engine/look.py`), how questions are arranged (`engine/layout.py`), what the buttons or
