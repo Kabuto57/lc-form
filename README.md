@@ -678,3 +678,5 @@ layout: box widths are worked out from the label and `max`.
     `<name>_form.py`: `lc_form.py`, `example_form.py`. The PDF is unchanged apart from those button scripts; all 34
     script tests pass, and a copy with a byte order mark and Windows line endings on every file builds the
     identical PDF.
+16. **Tidy-up.** Removed `build_lc_application.py`, an old single-file builder uploaded early on. Nothing used it,
+    and it needed PyMuPDF (AGPL), which this project no longer uses. The PDF is unchanged.
