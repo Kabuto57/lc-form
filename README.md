@@ -698,3 +698,8 @@ layout: box widths are worked out from the label and `max`.
 20. **No per-form colours.** `STYLE` (added in 19) is removed: a simple form doesn't need it, and every form keeps
     the same look (red = mandatory). Colours and text sizes stay in `layout.py`, section 1. `width`, `new_page` and
     `cols` stay, as optional overrides only: without them `layout.py` decides.
+22. **Back to the previous way; only the LC form file restyled.** Item 21 is undone (`half=` is accepted again, the
+    currency list stays in `lc_form.py`, no file-name or form-code checks, `dc_amendment_form.py` is a local draft
+    again). `lc_form.py` alone now matches `eblc_form.py`: the "WHAT YOU CAN CUSTOMISE" list at the top, the
+    sections written inside `FORM`, and no `half=` (it did nothing). The LC PDF's pages and fields are in exactly
+    the same places; the other forms build byte-identical PDFs.
