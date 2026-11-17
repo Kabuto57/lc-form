@@ -50,8 +50,10 @@ import sys
 #     max=35                              at most 35 characters
 #     format="amount"                     amount / number / phone / account (see FORMATS in layout.py)
 #     beside=69.3                         label beside a box this wide, even when the label is long
+#     cols=12                             how much of the row it takes, out of 12: cols=12 whole row, cols=6 half,
+#                                         cols=4 a third. Leave it out to let the build choose (usually best)
 #     half=True / half=False              kept in the PDF's copy of the form, but has no effect on the layout:
-#                                         box widths are worked out automatically from the label and max
+#                                         box widths are worked out automatically from the label and max (use cols)
 # Sections:  section("Title", fields=[...]), plus note="..." (text under the heading), bankOnly=True (shaded,
 # "For Bank Use Only"), signoff=True (signature, date and company stamp lines).
 #
@@ -97,7 +99,7 @@ def answered(field):
 
 # ---- check_form: explains mistakes in a form file before anything is built -------------------------------------
 KINDS = ("text", "long", "date", "radio", "checks", "check", "select")
-QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside"}
+QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols"}
 SECTION_OPTIONS = {"title", "fields", "note", "bankOnly", "signoff"}
 
 
@@ -135,6 +137,8 @@ def check_form(form, defaults, formats):
                 stop(f'{name}: unknown format "{q["format"]}". Allowed: {", ".join(formats)}.')
             if q.get("max") is not None and (not isinstance(q["max"], int) or q["max"] < 1):
                 stop(f"{name}: max must be a whole number of characters, like max=35.")
+            if q.get("cols") is not None and q["cols"] not in range(1, 13):
+                stop(f"{name}: cols must be a whole number from 1 to 12, like cols=12 (whole row) or cols=6 (half).")
             questions[q["id"]] = (q, name)
             ids.append(q["id"])
     for q, name in questions.values():

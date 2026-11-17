@@ -507,7 +507,9 @@ class Layout:
 
     # =========================================================================================== the grid
     def columns_needed(self, q, label_above=False):
-        """How many of the 12 grid columns a question needs."""
+        """How many of the 12 grid columns a question needs (cols=N in the form file decides it instead)."""
+        if q.get("cols"):
+            return q["cols"]
         column_w = (W - 2 * M - (COLUMNS - 1) * COLUMN_GAP) / COLUMNS
         label = width(safe(q["label"]), TEXT if q["kind"] == "check" else LABEL) + (16 if q["kind"] == "check" else 10) + 18
         box = self.box_width_needed(q)
@@ -566,7 +568,7 @@ class Layout:
             area = {**area, "x": area["x"] + INDENT, "w": area["w"] - INDENT}
         x, _, span_width = self.inside(area)
         n = [min(area["cols"], self.columns_needed(q)) for q in row]
-        grows = [q["kind"] in ("long", "select") or (q["kind"] == "text" and q.get("format") != "number" and (q.get("max") or 99) > 3) for q in row]
+        grows = [not q.get("cols") and (q["kind"] in ("long", "select") or (q["kind"] == "text" and q.get("format") != "number" and (q.get("max") or 99) > 3)) for q in row]
         growing, spare = sum(grows), area["cols"] - sum(n)
         if growing:
             for i in range(len(row)):

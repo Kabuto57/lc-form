@@ -82,6 +82,7 @@ text("applicant_name", "Applicant name", required=True, max=35),
 | Make it mandatory only for some answers | Add `requiredIf=when("drafts_at", "Term")` (the id, then the answer(s)) |
 | Allow digits only / an amount | Add `format="number"` or `format="amount"` (also `phone`, `account`) |
 | Limit the length | Add or change `max=35` |
+| Make a question take the whole row | Add `cols=12` (the row has 12 columns: `cols=6` = half, `cols=4` = a third). Without `cols` the build picks a width from the label and `max` |
 | Change the choices of a question | Edit the list: `["Sight", "Term"]` |
 | Add a question | Copy a similar line, paste it where it should appear, give it a **new id**, change the label |
 | Remove a question | Delete its line. Also delete any `requiredIf=...("its_id")` or `DEFAULTS` entry that names its id. |

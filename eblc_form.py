@@ -25,10 +25,10 @@ FORM = {
         # 1. Who is presenting
         section("Exporter", fields=[
             date("application_date", "Date", required=True),
-            text("exporter_name", "Exporter name", required=True, max=35),
+            text("exporter_name", "Exporter name", required=True, max=35, cols=12),   # cols=12: the whole row (cols=6: half)
             text("exporter_address_1", "Exporter address", required=True, max=35),
             text("exporter_address_2", "Exporter address (line 2)", max=35),
-            text("contact_name", "Contact person", required=True, max=35),
+            text("contact_name", "Contact person", required=True, max=35, cols=6),
             text("contact_tel", "Contact tel no", required=True, max=15, format="phone"),
             text("credit_account", "Account to credit the proceeds", required=True, max=20, format="account"),
         ]),

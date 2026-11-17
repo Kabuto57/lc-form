@@ -105,6 +105,7 @@ put a file in the wrong place.
 | You want to change | Edit |
 |---|---|
 | A question's wording, options, mandatory rule, max length or format | `lc_form.py` |
+| How wide one question is (e.g. a whole row) | add `cols=12` (or `cols=6` for half) to its line in the form file |
 | Add or remove a question | `lc_form.py` (nothing else: the checks follow the form) |
 | The number of pages the form must fit on | `PAGES` in `lc_form.py` |
 | Make a new form | copy `example_form.py` to `<name>_form.py` (see [GUIDE.md](GUIDE.md)) |
@@ -158,7 +159,7 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `l
    and boxes as PDF drawing commands.
    - Header on every page ("DEMO BANK · TRADE SERVICES"); the title and instructions on page 1.
    - Each section: a grey heading band with its number, then its questions on a 12-column grid. Short questions
-     share a row. A label sits beside its box when the whole row has room ("Name: [   ]"), otherwise above it.
+     share a row (`cols=N` on a question fixes its width: 12 = whole row, 6 = half). A label sits beside its box when the whole row has room ("Name: [   ]"), otherwise above it.
      Tick boxes have the questions they switch on indented under them. Short sections sit side by side (4 and 5).
    - Each question: its number (e.g. **13.2**), its label, and a red `*` if it's always mandatory.
    - The declaration block (signature, date and company-stamp lines), the QR code page, and the footers on every
@@ -683,3 +684,7 @@ layout: box widths are worked out from the label and `max`.
     and it needed PyMuPDF (AGPL), which this project no longer uses. The PDF is unchanged.
 17. **EBLC demo form.** Added `eblc_form.py` (Export Bills under Letter of Credit, Form EB-01, draft v0.1): 5
     sections, 3 pages, using every kind of mandatory rule. Questions to be checked with Trade Operations before use.
+18. **`cols=` sets a question's width.** A question can say how much of its row it takes, out of 12 columns:
+    `cols=12` the whole row, `cols=6` half, `cols=4` a third. Without it the build still chooses (as before), so
+    the LC, example and leave forms build byte-identical PDFs. A section with a whole-row question no longer sits
+    side by side with another. `eblc_form.py` uses it: Exporter name takes the whole row, Contact person half.
