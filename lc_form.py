@@ -1,10 +1,10 @@
 """THE LC APPLICATION FORM (Irrevocable Documentary Credit Application, Form LC-01).
 
 This file says WHAT the form asks. To make the PDF, run (from the lc-form folder):
-    python build.py forms/lc.py          -> out/LC-Application.pdf
+    python build.py lc_form.py          -> out/LC-Application.pdf
 If you made a mistake in this file, the build stops and tells you which question and what is wrong.
 
-QUICK CHEAT SHEET (every kind and option: engine/questions.py, top of the file; step by step: GUIDE.md)
+QUICK CHEAT SHEET (every kind and option: build.py, section 1; step by step: GUIDE.md)
     Change wording            edit the text in quotes:   text("applicant_name", "Applicant name", ...)
     Make mandatory            add  required=True
     Mandatory only if ...     add  requiredIf=ticked("drafts")   or   requiredIf=when("drafts_at", "Term")
@@ -20,7 +20,7 @@ Bank's system reads it.
 """
 
 
-from engine.questions import answered, check, checks, date, long, radio, section, select, text, ticked, when
+from build import answered, check, checks, date, long, radio, section, select, text, ticked, when
 
 # ISO 4217 currency codes, common trade currencies first.
 CURRENCIES = ["SGD", "USD", "EUR", "GBP", "JPY", "CNY", "HKD", "AUD", "NZD", "CAD", "CHF", "MYR", "IDR", "THB", "INR", "KRW", "TWD", "PHP", "VND", "AED", "SAR", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AWG", "AZN", "BAM", "BBD", "BDT", "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTN", "BWP", "BYN", "BZD", "CDF", "CLP", "COP", "CRC", "CUC", "CUP", "CVE", "CZK", "DJF", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "FJD", "FKP", "GEL", "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HNL", "HRK", "HTG", "HUF", "ILS", "IQD", "IRR", "ISK", "JMD", "JOD", "KES", "KGS", "KHR", "KMF", "KPW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LYD", "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "OMR", "PAB", "PEN", "PGK", "PKR", "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SBD", "SCR", "SDG", "SEK", "SHP", "SLE", "SOS", "SRD", "SSP", "STN", "SVC", "SYP", "SZL", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TZS", "UAH", "UGX", "UYU", "UZS", "VES", "VUV", "WST", "XAF", "XCD", "XCG", "XDR", "XOF", "XPF", "XSU", "YER", "ZAR", "ZMW", "ZWG"]

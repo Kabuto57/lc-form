@@ -1,12 +1,12 @@
 """EXAMPLE: A SMALL FORM TO COPY WHEN YOU START A NEW ONE (Annual Leave Request).
 
-Build it:   python build.py forms/example_leave.py     -> out/Annual-Leave-Request.pdf
+Build it:   python build.py example_form.py     -> out/Annual-Leave-Request.pdf
 
-To start a new form: copy this file to a new name in forms/ (e.g. forms/my_form.py), then change the parts marked
-"CHANGE". Every kind of question and every option is listed at the top of engine/questions.py.
+To start a new form: copy this file to a new name ending in _form.py (e.g. trade_loan_form.py), then change the parts marked
+"CHANGE". Every kind of question and every option is listed in section 1 of build.py.
 """
 # Always keep this line: it brings in the words used below (text, date, radio ...).
-from engine.questions import check, date, long, radio, section, text, ticked, when
+from build import check, date, long, radio, section, text, ticked, when
 
 FORM = {
     "title": "Annual Leave Request",                 # CHANGE: shown at the top of page 1
