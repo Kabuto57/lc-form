@@ -6,6 +6,7 @@ You don't need to know how to program. You edit **one file** (a form file), run 
 lc-form/
   lc_form.py        <- THE LC FORM. To change the LC form, edit this file only.
   example_form.py   <- a small example. Copy it to start a new form.
+  eblc_form.py      <- a 5-section demo (Export Bills under LC): every kind of mandatory rule.
   build.py          <- RUN THIS:  python build.py lc_form.py
   layout.py         \
   pdf_writer.py      > the engine: the same for every form. Never edit these.

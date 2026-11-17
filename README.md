@@ -90,6 +90,7 @@ put a file in the wrong place.
 |---|---|---|
 | `lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). | Anyone changing the form |
 | `example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
+| `eblc_form.py` | A 5-section demo form (Export Bills under Letter of Credit, Form EB-01, draft). Shows every kind of mandatory rule: always, when an answer is picked (Usance), when a box is ticked (each document), once another answer is given (FX contract). Uses `lc_form.py`'s currency list, so keep both in one folder. | Anyone making a new form |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows. Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
@@ -680,3 +681,5 @@ layout: box widths are worked out from the label and `max`.
     identical PDF.
 16. **Tidy-up.** Removed `build_lc_application.py`, an old single-file builder uploaded early on. Nothing used it,
     and it needed PyMuPDF (AGPL), which this project no longer uses. The PDF is unchanged.
+17. **EBLC demo form.** Added `eblc_form.py` (Export Bills under Letter of Credit, Form EB-01, draft v0.1): 5
+    sections, 3 pages, using every kind of mandatory rule. Questions to be checked with Trade Operations before use.
