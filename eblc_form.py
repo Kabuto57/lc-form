@@ -10,7 +10,33 @@ A starting point, to be checked with Trade Operations before use. 5 sections:
     4. Instructions              discrepancies, proceeds, financing
     5. Declaration and Signature
 Ids that mean the same as on the LC form (currency, amount ...) keep the same names, so the Bank's system reads
-them the same way. Every kind of question and option: build.py, section 1. Step by step: GUIDE.md.
+them the same way. Step by step: GUIDE.md.
+
+WHAT YOU CAN CUSTOMISE (all in this file; every option is also listed in build.py, section 1)
+    THE WHOLE FORM      FORM = {...}: "title", "note" (under the title), "issuer" (top of every page), "formCode" (footer
+                        and QR code). PDF_NAME (the file name). DEFAULTS (answers filled in when the form opens).
+    A SECTION           section("Title", fields=[...], ...) plus any of:
+                          width="full"      the whole width of the page
+                          width="half"      half the page; two half sections in a row sit side by side
+                          (no width)        the build decides: two short, similar sections sit side by side
+                          new_page=True     starts on a new page
+                          note="..."        text under the heading
+                          bankOnly=True     shaded "For Bank Use Only" section
+                          signoff=True      signature, date and company stamp lines (always the whole width)
+    A QUESTION          text / long / date / radio / checks / check / select (id, label, ...) plus any of:
+                          required=True                     always mandatory (red *)
+                          requiredIf=ticked("x")            mandatory (and unlocked) only when tick box x is ticked
+                          requiredIf=when("x", "A", "B")    mandatory only when x is A or B
+                          requiredIf=answered("x")          mandatory once x has any answer
+                          activeIf=ticked("x")              unlocked only when x is ticked, but optional
+                          max=35                            at most 35 characters (also sets the box width)
+                          format="amount"                   amount / number / phone / account
+                          cols=12                           width out of 12 columns: 12 whole row, 6 half, 4 a third
+                                                            (no cols: the build picks from the label and max)
+    THE LOOK            STYLE = {...} at the end of the file: colours and text sizes for this form only.
+                        To change them for EVERY form: layout.py, section 1.
+    NOT IN THIS FILE    checks that compare two answers (e.g. a date must be after another): acrobat_js.py
+                        (across) and read_qr.py (checks_across), kept the same.
 """
 from build import answered, check, date, long, radio, section, select, text, ticked, when
 from lc_form import CURRENCIES   # the same currency list as the LC form
@@ -23,7 +49,7 @@ FORM = {
     "sections": [
 
         # 1. Who is presenting
-        section("Exporter", fields=[
+        section("Exporter", width="full", fields=[
             date("application_date", "Date", required=True),
             text("exporter_name", "Exporter name", required=True, max=35, cols=12),   # cols=12: the whole row (cols=6: half)
             text("exporter_address_1", "Exporter address", required=True, max=35),
@@ -34,7 +60,7 @@ FORM = {
         ]),
 
         # 2. The LC
-        section("Letter of Credit", fields=[
+        section("Letter of Credit", width="full", fields=[
             text("lc_number", "LC number", required=True, max=16),
             text("issuing_bank", "Issuing bank", required=True, max=35),
             date("lc_expiry_date", "LC expiry date", required=True),
@@ -48,7 +74,7 @@ FORM = {
         ]),
 
         # 3. What is enclosed
-        section("Documents Presented", note="Tick each document enclosed and give the number of originals.", fields=[
+        section("Documents Presented", width="half", note="Tick each document enclosed and give the number of originals.", fields=[
             check("doc_invoice", "Commercial invoice"),
             text("doc_invoice_count", "Commercial invoice: originals", requiredIf=ticked("doc_invoice"), max=2, format="number"),
             check("doc_transport", "Bill of lading / air waybill"),
@@ -63,7 +89,7 @@ FORM = {
         ]),
 
         # 4. What the Bank should do
-        section("Instructions", fields=[
+        section("Instructions", width="half", fields=[
             radio("discrepancy_instruction", "If the documents are discrepant",
                   ["Send to the issuing bank for approval", "Hold and contact us", "Return the documents to us"],
                   required=True),
@@ -95,3 +121,13 @@ DEFAULTS = {
 }
 
 PDF_NAME = "EBLC-Application.pdf"   # written to out/
+
+# The look of this form only (optional; delete the # at the start of each line to try it). Colours are
+# (red, green, blue), each 0 to 1. Anything left out keeps its usual value from layout.py, section 1.
+# STYLE = {
+#     "ACCENT": (0, 0.3, 0.6),          # header line, question numbers, buttons (usual: black)
+#     "TINT": (0.85, 0.9, 0.95),        # band behind each section heading (usual: light grey)
+#     "BANK_SHADE": (0.95, 0.95, 0.95), # background of a "For Bank Use Only" section
+#     "LABEL": 7.5,                     # size of the question labels
+#     "TEXT": 8.5,                      # size of the answers, options and tick-box wording
+# }

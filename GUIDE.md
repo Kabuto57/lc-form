@@ -82,6 +82,9 @@ text("applicant_name", "Applicant name", required=True, max=35),
 | Make it mandatory only for some answers | Add `requiredIf=when("drafts_at", "Term")` (the id, then the answer(s)) |
 | Allow digits only / an amount | Add `format="number"` or `format="amount"` (also `phone`, `account`) |
 | Limit the length | Add or change `max=35` |
+| Make a section the whole width / half | Add `width="full"` or `width="half"` to its `section(...)`. Two half sections in a row sit side by side. Without `width` the build decides |
+| Start a section on a new page | Add `new_page=True` to its `section(...)` |
+| Change this form's colours or text sizes | Add `STYLE = {...}` at the end of the form file (see the end of `eblc_form.py`). For every form: `layout.py`, section 1 |
 | Make a question take the whole row | Add `cols=12` (the row has 12 columns: `cols=6` = half, `cols=4` = a third). Without `cols` the build picks a width from the label and `max` |
 | Change the choices of a question | Edit the list: `["Sight", "Term"]` |
 | Add a question | Copy a similar line, paste it where it should appear, give it a **new id**, change the label |

@@ -687,11 +687,19 @@ class Layout:
         self.top -= 5
 
     def draw_sections(self):
-        """Draws the sections in order: full width, or two side by side when both are short and similar in height."""
+        """Draws the sections in order: full width, or two side by side when both are short and similar in height.
+        A section's width="full" / width="half" (in the form file) decides instead; new_page=True starts a new page."""
         full = {"x": M, "w": W - 2 * M, "cols": COLUMNS}
         half_w = (W - 2 * M - SECTION_GAP) / 2
         left = {"x": M, "w": half_w, "cols": COLUMNS // 2}
         right = {**left, "x": M + half_w + SECTION_GAP}
+
+        def options_fit(s):   # every radio / tick-any option fits in half the page
+            inner_w = self.inside(left)[1]
+            return all(self.option_width(o) < inner_w for q in s["fields"] if has_options(q["kind"]) for o in q.get("options") or [])
+
+        def can_half(s):
+            return s.get("width") != "full" and (s.get("width") == "half" and options_fit(s) or s.get("width") is None and fits_half(s))
 
         def fits_half(s):
             inner_w = self.inside(left)[1]
@@ -704,11 +712,22 @@ class Layout:
         while i < len(sections):
             a = sections[i]
             b = sections[i + 1] if i + 1 < len(sections) else None
+            if b and b.get("new_page"):
+                b = None   # the next section starts a new page, so it can't sit beside this one
+            if a.get("new_page") and i > 0:
+                self.new_page()
             height_a = self.section_height(a, left) if b else 0
             height_b = self.section_height(b, right) if b else 0
-            side_by_side = b and fits_half(a) and fits_half(b) and min(height_a, height_b) >= 0.45 * max(height_a, height_b)
+            both_half = b and a.get("width") == "half" and b.get("width") == "half"
+            side_by_side = b and can_half(a) and can_half(b) and (both_half or min(height_a, height_b) >= 0.45 * max(height_a, height_b))
             pair_height = max(height_a, height_b) + SECTION_GAP
             # Full width when they can't pair, or when the pair doesn't fit here but the first section alone does.
+            if not side_by_side and a.get("width") == "half" and options_fit(a):   # a half section with no half partner
+                if self.top - self.section_height(a, left) < BOTTOM:
+                    self.new_page()
+                self.draw_section(a, i, left, False)
+                i += 1
+                continue
             if not side_by_side or (self.top - pair_height < BOTTOM and self.top - self.section_height(a, full) - SECTION_GAP >= BOTTOM):
                 self.draw_section(a, i, full, True)
                 i += 1
