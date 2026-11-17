@@ -513,21 +513,22 @@ class Layout:
             i += 2
 
     def draw_qr_page(self):
-        """A last page with room for two QR codes of the answers, one above the other, and the Generate QR Code and
-        Print Form buttons at the bottom. engine/js/document.js draws the codes in Acrobat: usually one code fills the first
-        frame; only when the answers are too long for one code does the second frame appear, with the rest."""
+        """A last page with room for two QR codes of the answers, one above the other. The Generate QR Code and Print
+        Form buttons sit right under the first code, where they always were. engine/js/document.js draws the codes in
+        Acrobat: usually one code fills the first frame; only when the answers are too long for one code does the
+        second frame (under the buttons) appear, with the rest."""
         self.new_page()
         self.text("APPLICATION QR CODE (FOR BANK USE)", M, H - 56, 11, True)
         y = H - 70
-        for line in wrap("When the form is filled in, press Generate QR Code (at the bottom of this page), then Print Form. The Bank scans the code to read the application (all the answers, as JSON). If the answers are too long for one code, a second code appears under the first: the Bank scans both. Do not write on or fold the codes.", 8, W - 2 * M):
+        for line in wrap("When the form is filled in, press Generate QR Code (under the code), then Print Form. The Bank scans the code to read the application (all the answers, as JSON). If the answers are too long for one code, a second code appears under the buttons: the Bank scans both. Do not write on or fold the codes.", 8, W - 2 * M):
             self.text(line, M, y, 8, color=GREY)
             y -= 10
-        buttons_y = 46                                         # the buttons sit just above the footer line
-        label, gap = 12, 8                                     # room for "QR code 1 of 2" above each frame; gap between
-        size = int((y - 4 - (buttons_y + 30) - 2 * label - gap) / 2)   # two equal frames fill the rest of the page
+        label, gap, button_h = 12, 10, 22   # room for "QR code 1 of 2" above each frame; space around the buttons
+        size = int((y - 4 - 46 - 2 * label - button_h - 2 * gap) / 2)   # two equal frames fill the page above the footer
         x = (W - size) / 2
         first_y = y - 4 - label - size
-        self.qr = {"page": self.page.number, "slots": [(x, first_y, size), (x, first_y - gap - label - size, size)],
+        buttons_y = first_y - gap - button_h
+        self.qr = {"page": self.page.number, "slots": [(x, first_y, size), (x, buttons_y - gap - label - size, size)],
                    "button": ((W - 312) / 2, buttons_y)}
         self.rect(x, first_y, size, size, border=RULE, border_width=0.5)   # the second frame is a field, shown when needed
 

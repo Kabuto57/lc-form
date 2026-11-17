@@ -471,8 +471,9 @@ The code is made **inside the PDF, in Acrobat**, when the person presses Generat
 and no QR library is used.
 
 **One code, or two when the answers don't fit.** One QR code holds 2,300 characters. Most applications fit, and get
-one code. When the answers are longer, a **second code appears under the first**, and the Bank scans both. The QR
-page always has room for two, one above the other, with the Generate QR Code and Print Form buttons at the bottom:
+one code. When the answers are longer, a **second code appears under the buttons**, and the Bank scans both. The QR
+page always has room for two, one above the other. The Generate QR Code and Print Form buttons stay right under the
+first code, where they always were:
 
 ```
   APPLICATION QR CODE (FOR BANK USE)
@@ -481,14 +482,14 @@ page always has room for two, one above the other, with the Generate QR Code and
            ┌──────────────────────┐
            │      QR code 1       │                   always used
            └──────────────────────┘
+        [ Generate QR Code ]  [ Print Form ]
             QR code 2 of 2
            ┌──────────────────────┐
            │      QR code 2       │                   frame and code appear only when needed
            └──────────────────────┘
-        [ Generate QR Code ]  [ Print Form ]
 ```
 
-Each code is 111 mm square: 177 × 177 squares of 0.6 mm.
+Each code is 110 mm square: 177 × 177 squares of 0.6 mm.
 
 1. **The text: `lcPayload` (`engine/js/document.js`).** It gathers every answered question, keyed by field id. Tick boxes
    become `true`, and tick-any questions become lists:
@@ -663,3 +664,6 @@ layout: box widths are worked out from the label and `max`.
     joins them in the right order, re-checks every answer against the form file (`engine/validate.py`, the same
     rules as the form, plus the checks across answers), and saves the result as JSON. New dependency: zxing-cpp
     3.1.1 (Apache-2.0), only for reading.
+14. **QR buttons back under the first code.** Generate QR Code and Print Form sit right under QR code 1 again, as in
+    the original layout; the second code (when needed) appears under the buttons. Each code is now 110 mm (squares
+    of 0.6 mm). Tested: 34 script tests pass, and both codes scan from a rendered page and join into the exact JSON.
