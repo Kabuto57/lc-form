@@ -12,7 +12,7 @@ A starting point, to be checked with Trade Operations before use. 5 sections:
 Ids that mean the same as on the LC form (currency, amount ...) keep the same names, so the Bank's system reads
 them the same way. Every kind of question and option: build.py, section 1. Step by step: GUIDE.md.
 """
-from build import answered, check, checks, date, long, radio, section, select, text, ticked, when
+from build import answered, check, date, long, radio, section, select, text, ticked, when
 from lc_form import CURRENCIES   # the same currency list as the LC form
 
 FORM = {
