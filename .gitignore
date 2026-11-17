@@ -2,3 +2,6 @@
 __pycache__/
 out/
 .DS_Store
+benchmark/.env
+benchmark/work/
+benchmark/old/

@@ -1,0 +1,2401 @@
+{
+ "samples": {
+  "01-typed-clean": {
+   "page1": [
+    "01-typed-clean-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "01-typed-clean-closeup.png",
+    [
+     2184,
+     1783
+    ]
+   ],
+   "qr": [
+    "01-typed-clean-qr.png",
+    [
+     1747,
+     1400
+    ]
+   ]
+  },
+  "02-typed-clean": {
+   "page1": [
+    "02-typed-clean-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "02-typed-clean-closeup.png",
+    [
+     2184,
+     1783
+    ]
+   ],
+   "qr": [
+    "02-typed-clean-qr.png",
+    [
+     1747,
+     1400
+    ]
+   ]
+  },
+  "03-typed-medium": {
+   "page1": [
+    "03-typed-medium-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "03-typed-medium-closeup.png",
+    [
+     1456,
+     1189
+    ]
+   ],
+   "qr": [
+    "03-typed-medium-qr.png",
+    [
+     1164,
+     932
+    ]
+   ]
+  },
+  "04-typed-poor": {
+   "page1": [
+    "04-typed-poor-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "04-typed-poor-closeup.png",
+    [
+     1092,
+     892
+    ]
+   ],
+   "qr": [
+    "04-typed-poor-qr.png",
+    [
+     873,
+     700
+    ]
+   ]
+  },
+  "05-hand-clean": {
+   "page1": [
+    "05-hand-clean-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "05-hand-clean-closeup.png",
+    [
+     2184,
+     1783
+    ]
+   ]
+  },
+  "06-hand-clean": {
+   "page1": [
+    "06-hand-clean-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "06-hand-clean-closeup.png",
+    [
+     2184,
+     1783
+    ]
+   ]
+  },
+  "07-hand-medium": {
+   "page1": [
+    "07-hand-medium-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "07-hand-medium-closeup.png",
+    [
+     1456,
+     1189
+    ]
+   ]
+  },
+  "08-hand-medium": {
+   "page1": [
+    "08-hand-medium-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "08-hand-medium-closeup.png",
+    [
+     1456,
+     1189
+    ]
+   ]
+  },
+  "09-hand-poor": {
+   "page1": [
+    "09-hand-poor-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "09-hand-poor-closeup.png",
+    [
+     1092,
+     892
+    ]
+   ]
+  },
+  "10-hand-poor": {
+   "page1": [
+    "10-hand-poor-page1.png",
+    [
+     900,
+     1272
+    ]
+   ],
+   "closeup": [
+    "10-hand-poor-closeup.png",
+    [
+     1092,
+     892
+    ]
+   ]
+  }
+ },
+ "errors": [
+  {
+   "reader": "gemini-3.7-flash",
+   "sample": "04-typed-poor",
+   "field": "gst",
+   "kind": "wrong",
+   "true": "inclusive of GST",
+   "read": "No GST",
+   "image": [
+    "error-04-typed-poor-gst.png",
+    [
+     938,
+     206
+    ]
+   ]
+  },
+  {
+   "reader": "gemini-3.7-flash",
+   "sample": "04-typed-poor",
+   "field": "price_basis",
+   "kind": "missed",
+   "true": "CPT",
+   "read": null,
+   "image": [
+    "error-04-typed-poor-price_basis.png",
+    [
+     1226,
+     258
+    ]
+   ]
+  },
+  {
+   "reader": "gemini-3.7-flash",
+   "sample": "09-hand-poor",
+   "field": "term_prepay",
+   "kind": "missed",
+   "true": "You may not prepay the acceptance of this term LC",
+   "read": null,
+   "image": [
+    "error-09-hand-poor-term_prepay.png",
+    [
+     648,
+     258
+    ]
+   ]
+  }
+ ],
+ "fields": [
+  {
+   "number": "1.1",
+   "sort": [
+    1,
+    1
+   ],
+   "id": "application_date",
+   "label": "Date",
+   "kind": "date",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "2.1",
+   "sort": [
+    2,
+    1
+   ],
+   "id": "mode_of_advising",
+   "label": "Mode of advising",
+   "kind": "radio",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "3.1",
+   "sort": [
+    3,
+    1
+   ],
+   "id": "applicant_name",
+   "label": "Applicant name",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "3.2",
+   "sort": [
+    3,
+    2
+   ],
+   "id": "applicant_address_1",
+   "label": "Applicant address",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "3.3",
+   "sort": [
+    3,
+    3
+   ],
+   "id": "applicant_address_2",
+   "label": "Applicant address (line 2)",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    9,
+    9,
+    0
+   ]
+  },
+  {
+   "number": "3.4",
+   "sort": [
+    3,
+    4
+   ],
+   "id": "applicant_address_3",
+   "label": "Applicant address (line 3)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "3.5",
+   "sort": [
+    3,
+    5
+   ],
+   "id": "applicant_address_4",
+   "label": "Applicant address (line 4)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "3.6",
+   "sort": [
+    3,
+    6
+   ],
+   "id": "contact_name",
+   "label": "Contact party for this application & confirmation of FX rate: Name",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "3.7",
+   "sort": [
+    3,
+    7
+   ],
+   "id": "contact_tel",
+   "label": "Contact party: Tel no",
+   "kind": "phone",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "3.8",
+   "sort": [
+    3,
+    8
+   ],
+   "id": "contact_fax",
+   "label": "Contact party: Fax no",
+   "kind": "phone",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "4.1",
+   "sort": [
+    4,
+    1
+   ],
+   "id": "dc_no",
+   "label": "DC no",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "4.2",
+   "sort": [
+    4,
+    2
+   ],
+   "id": "bank_code",
+   "label": "Bank code",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "5.1",
+   "sort": [
+    5,
+    1
+   ],
+   "id": "advising_bank_name",
+   "label": "Name",
+   "kind": "text",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "5.2",
+   "sort": [
+    5,
+    2
+   ],
+   "id": "advising_bank_address_1",
+   "label": "Address",
+   "kind": "text",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "5.3",
+   "sort": [
+    5,
+    3
+   ],
+   "id": "advising_bank_address_2",
+   "label": "Address (line 2)",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    9,
+    9,
+    0
+   ]
+  },
+  {
+   "number": "5.4",
+   "sort": [
+    5,
+    4
+   ],
+   "id": "advising_bank_address_3",
+   "label": "Address (line 3)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "6.1",
+   "sort": [
+    6,
+    1
+   ],
+   "id": "third_party_name",
+   "label": "Name",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "6.2",
+   "sort": [
+    6,
+    2
+   ],
+   "id": "third_party_address_1",
+   "label": "Address",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "6.3",
+   "sort": [
+    6,
+    3
+   ],
+   "id": "third_party_address_2",
+   "label": "Address (line 2)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "6.4",
+   "sort": [
+    6,
+    4
+   ],
+   "id": "third_party_address_3",
+   "label": "Address (line 3)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "7.1",
+   "sort": [
+    7,
+    1
+   ],
+   "id": "beneficiary_name",
+   "label": "Beneficiary's name",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "7.2",
+   "sort": [
+    7,
+    2
+   ],
+   "id": "beneficiary_address_1",
+   "label": "Beneficiary's address",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "7.3",
+   "sort": [
+    7,
+    3
+   ],
+   "id": "beneficiary_address_2",
+   "label": "Beneficiary's address (line 2)",
+   "kind": "text",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "7.4",
+   "sort": [
+    7,
+    4
+   ],
+   "id": "beneficiary_address_3",
+   "label": "Beneficiary's address (line 3)",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    9,
+    9,
+    0
+   ]
+  },
+  {
+   "number": "7.5",
+   "sort": [
+    7,
+    5
+   ],
+   "id": "beneficiary_address_4",
+   "label": "Beneficiary's address (line 4)",
+   "kind": "text",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "7.6",
+   "sort": [
+    7,
+    6
+   ],
+   "id": "beneficiary_contact",
+   "label": "Contact person",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "7.7",
+   "sort": [
+    7,
+    7
+   ],
+   "id": "beneficiary_tel",
+   "label": "Tel no",
+   "kind": "phone",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    9,
+    9,
+    0
+   ]
+  },
+  {
+   "number": "7.8",
+   "sort": [
+    7,
+    8
+   ],
+   "id": "beneficiary_fax",
+   "label": "Fax no",
+   "kind": "phone",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "8.1",
+   "sort": [
+    8,
+    1
+   ],
+   "id": "currency",
+   "label": "Currency",
+   "kind": "select",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "8.2",
+   "sort": [
+    8,
+    2
+   ],
+   "id": "amount",
+   "label": "Amount",
+   "kind": "amount",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "8.3",
+   "sort": [
+    8,
+    3
+   ],
+   "id": "gst",
+   "label": "For local DCs, amount is (if not checked, it will be inclusive of GST)",
+   "kind": "radio",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "8.4",
+   "sort": [
+    8,
+    4
+   ],
+   "id": "tolerance",
+   "label": "Tolerance on credit amount & goods quantity",
+   "kind": "check",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "8.5",
+   "sort": [
+    8,
+    5
+   ],
+   "id": "tolerance_plus",
+   "label": "Tolerance + (%)",
+   "kind": "number",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "8.6",
+   "sort": [
+    8,
+    6
+   ],
+   "id": "tolerance_minus",
+   "label": "Tolerance - (%)",
+   "kind": "number",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "9.1",
+   "sort": [
+    9,
+    1
+   ],
+   "id": "price_basis",
+   "label": "Price basis",
+   "kind": "radio",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    9,
+    0
+   ]
+  },
+  {
+   "number": "9.2",
+   "sort": [
+    9,
+    2
+   ],
+   "id": "price_basis_other",
+   "label": "Others (please specify)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "10.1",
+   "sort": [
+    10,
+    1
+   ],
+   "id": "partial_shipment",
+   "label": "Partial shipment",
+   "kind": "radio",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "10.2",
+   "sort": [
+    10,
+    2
+   ],
+   "id": "transhipment",
+   "label": "Transhipment",
+   "kind": "radio",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "10.3",
+   "sort": [
+    10,
+    3
+   ],
+   "id": "shipment_from",
+   "label": "Shipment from",
+   "kind": "select",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "10.4",
+   "sort": [
+    10,
+    4
+   ],
+   "id": "shipment_from_place",
+   "label": "Shipment from: place",
+   "kind": "text",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    9,
+    9,
+    0
+   ]
+  },
+  {
+   "number": "10.5",
+   "sort": [
+    10,
+    5
+   ],
+   "id": "shipment_from_place_2",
+   "label": "Shipment from: place (line 2)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "10.6",
+   "sort": [
+    10,
+    6
+   ],
+   "id": "shipment_to",
+   "label": "Shipment to",
+   "kind": "select",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "10.7",
+   "sort": [
+    10,
+    7
+   ],
+   "id": "shipment_to_place",
+   "label": "Shipment to: place",
+   "kind": "text",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    9,
+    9,
+    0
+   ]
+  },
+  {
+   "number": "10.8",
+   "sort": [
+    10,
+    8
+   ],
+   "id": "shipment_to_place_2",
+   "label": "Shipment to: place (line 2)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "10.9",
+   "sort": [
+    10,
+    9
+   ],
+   "id": "latest_shipment_date",
+   "label": "Latest shipment date",
+   "kind": "date",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "11.1",
+   "sort": [
+    11,
+    1
+   ],
+   "id": "expiry_date",
+   "label": "Date of expiry (in beneficiary's country)",
+   "kind": "date",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "11.2",
+   "sort": [
+    11,
+    2
+   ],
+   "id": "presentation_days",
+   "label": "Presentation period (days after shipment)",
+   "kind": "number",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "12.1",
+   "sort": [
+    12,
+    1
+   ],
+   "id": "back_to_back",
+   "label": "This is a back-to-back DC to be issued against the master credit (the \"Master DC\")",
+   "kind": "check",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "12.2",
+   "sort": [
+    12,
+    2
+   ],
+   "id": "master_dc_no",
+   "label": "Master credit no",
+   "kind": "text",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "12.3",
+   "sort": [
+    12,
+    3
+   ],
+   "id": "master_dc_issued_by",
+   "label": "Issued by",
+   "kind": "text",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "13.1",
+   "sort": [
+    13,
+    1
+   ],
+   "id": "drafts",
+   "label": "Drafts for the percentage of invoice value below, at",
+   "kind": "check",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "13.2",
+   "sort": [
+    13,
+    2
+   ],
+   "id": "drafts_percent",
+   "label": "Percentage of invoice value (%)",
+   "kind": "number",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "13.3",
+   "sort": [
+    13,
+    3
+   ],
+   "id": "drafts_at",
+   "label": "Drafts at",
+   "kind": "radio",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "13.4",
+   "sort": [
+    13,
+    4
+   ],
+   "id": "term_days",
+   "label": "Term: days",
+   "kind": "number",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "13.5",
+   "sort": [
+    13,
+    5
+   ],
+   "id": "term_after",
+   "label": "days after",
+   "kind": "text",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "13.6",
+   "sort": [
+    13,
+    6
+   ],
+   "id": "draft_date",
+   "label": "Date",
+   "kind": "date",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "13.7",
+   "sort": [
+    13,
+    7
+   ],
+   "id": "term_prepay",
+   "label": "If it is a term LC, please select one",
+   "kind": "radio",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    5,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.1",
+   "sort": [
+    14,
+    1
+   ],
+   "id": "doc_bill_of_lading",
+   "label": "Full set of Clean on Board marine bills of lading",
+   "kind": "check",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.2",
+   "sort": [
+    14,
+    2
+   ],
+   "id": "bl_made_out_to",
+   "label": "Made out to",
+   "kind": "radio",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.3",
+   "sort": [
+    14,
+    3
+   ],
+   "id": "bl_made_out_to_other",
+   "label": "Made out to (other)",
+   "kind": "text",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.4",
+   "sort": [
+    14,
+    4
+   ],
+   "id": "bl_freight",
+   "label": "Marked Freight",
+   "kind": "radio",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.5",
+   "sort": [
+    14,
+    5
+   ],
+   "id": "bl_notify_party",
+   "label": "Notify party (if not specified, notify party is considered to be applicant)",
+   "kind": "text",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.6",
+   "sort": [
+    14,
+    6
+   ],
+   "id": "doc_air_waybill",
+   "label": "Original Air Waybill consigned to the Bank",
+   "kind": "check",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.7",
+   "sort": [
+    14,
+    7
+   ],
+   "id": "awb_freight",
+   "label": "Marked Freight",
+   "kind": "radio",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.8",
+   "sort": [
+    14,
+    8
+   ],
+   "id": "awb_notify_party",
+   "label": "Notify party (if not specified, notify party is considered to be applicant)",
+   "kind": "text",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.9",
+   "sort": [
+    14,
+    9
+   ],
+   "id": "doc_delivery_order",
+   "label": "Delivery order signed by beneficiary made out to applicant",
+   "kind": "check",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.10",
+   "sort": [
+    14,
+    10
+   ],
+   "id": "do_originals",
+   "label": "Delivery order: originals",
+   "kind": "number",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.11",
+   "sort": [
+    14,
+    11
+   ],
+   "id": "do_copies",
+   "label": "Delivery order: copies",
+   "kind": "number",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.12",
+   "sort": [
+    14,
+    12
+   ],
+   "id": "do_countersigned_by",
+   "label": "Countersigned by how many of our signatories",
+   "kind": "select",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.13",
+   "sort": [
+    14,
+    13
+   ],
+   "id": "do_signature_verified",
+   "label": "Whose signature(s) ... to be verified by the Bank",
+   "kind": "select",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.14",
+   "sort": [
+    14,
+    14
+   ],
+   "id": "doc_insurance",
+   "label": "Marine/Air Insurance Policy or Certificate in duplicate, in Singapore in the currency of the credit, covering Institute Cargo Clauses (A), Institute War Clauses, Institute Strikes Clauses / Strikes, Riots and Civil Commotion",
+   "kind": "check",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.15",
+   "sort": [
+    14,
+    15
+   ],
+   "id": "insurance_arrangement",
+   "label": "For FOB/CFR/FCA/CPT",
+   "kind": "select",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    3,
+    3,
+    0
+   ]
+  },
+  {
+   "number": "14.16",
+   "sort": [
+    14,
+    16
+   ],
+   "id": "insurance_cover_no",
+   "label": "Open cover no",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    2,
+    2,
+    0
+   ]
+  },
+  {
+   "number": "14.17",
+   "sort": [
+    14,
+    17
+   ],
+   "id": "insurance_cover_with",
+   "label": "With",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    2,
+    2,
+    0
+   ]
+  },
+  {
+   "number": "14.18",
+   "sort": [
+    14,
+    18
+   ],
+   "id": "doc_beneficiary_certificate",
+   "label": "Beneficiary's certificate stating 1 set of non-negotiable documents has been sent to applicant",
+   "kind": "check",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.19",
+   "sort": [
+    14,
+    19
+   ],
+   "id": "bencert_sent_by",
+   "label": "Sent by",
+   "kind": "checks",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.20",
+   "sort": [
+    14,
+    20
+   ],
+   "id": "bencert_days",
+   "label": "Within (days after shipment)",
+   "kind": "number",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.21",
+   "sort": [
+    14,
+    21
+   ],
+   "id": "doc_commercial_invoice",
+   "label": "Signed commercial invoice",
+   "kind": "check",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "14.22",
+   "sort": [
+    14,
+    22
+   ],
+   "id": "invoice_originals",
+   "label": "Commercial invoice: originals",
+   "kind": "number",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "14.23",
+   "sort": [
+    14,
+    23
+   ],
+   "id": "invoice_copies",
+   "label": "Commercial invoice: copies",
+   "kind": "number",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  },
+  {
+   "number": "14.24",
+   "sort": [
+    14,
+    24
+   ],
+   "id": "doc_packing_list",
+   "label": "Packing list",
+   "kind": "check",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.25",
+   "sort": [
+    14,
+    25
+   ],
+   "id": "packing_list_originals",
+   "label": "Packing list: originals",
+   "kind": "number",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.26",
+   "sort": [
+    14,
+    26
+   ],
+   "id": "packing_list_copies",
+   "label": "Packing list: copies",
+   "kind": "number",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.27",
+   "sort": [
+    14,
+    27
+   ],
+   "id": "doc_weight_note",
+   "label": "Weight note",
+   "kind": "check",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.28",
+   "sort": [
+    14,
+    28
+   ],
+   "id": "weight_note_originals",
+   "label": "Weight note: originals",
+   "kind": "number",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.29",
+   "sort": [
+    14,
+    29
+   ],
+   "id": "weight_note_copies",
+   "label": "Weight note: copies",
+   "kind": "number",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "14.30",
+   "sort": [
+    14,
+    30
+   ],
+   "id": "doc_certificate_of_origin",
+   "label": "Certificate of origin",
+   "kind": "check",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.31",
+   "sort": [
+    14,
+    31
+   ],
+   "id": "origin_originals",
+   "label": "Certificate of origin: originals",
+   "kind": "number",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.32",
+   "sort": [
+    14,
+    32
+   ],
+   "id": "origin_copies",
+   "label": "Certificate of origin: copies",
+   "kind": "number",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.33",
+   "sort": [
+    14,
+    33
+   ],
+   "id": "origin_country",
+   "label": "Showing country of origin as",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.34",
+   "sort": [
+    14,
+    34
+   ],
+   "id": "doc_other",
+   "label": "Other documents",
+   "kind": "check",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.35",
+   "sort": [
+    14,
+    35
+   ],
+   "id": "other_documents_1",
+   "label": "Other documents",
+   "kind": "text",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "14.36",
+   "sort": [
+    14,
+    36
+   ],
+   "id": "other_documents_2",
+   "label": "Other documents (line 2)",
+   "kind": "text",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "number": "15.1",
+   "sort": [
+    15,
+    1
+   ],
+   "id": "goods_description",
+   "label": "Goods description (if space is insufficient, attach additional information with Company's stamp, signed by authorised signors)",
+   "kind": "long",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "16.1",
+   "sort": [
+    16,
+    1
+   ],
+   "id": "additional_conditions",
+   "label": "Additional conditions (if space is insufficient, attach additional information with Company's stamp, signed by authorised signors)",
+   "kind": "long",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    6,
+    6,
+    0
+   ]
+  },
+  {
+   "number": "17.1",
+   "sort": [
+    17,
+    1
+   ],
+   "id": "bank_charges",
+   "label": "All bank charges are for account of",
+   "kind": "check",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "17.2",
+   "sort": [
+    17,
+    2
+   ],
+   "id": "bank_charges_for",
+   "label": "Charges for account of",
+   "kind": "radio",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "17.3",
+   "sort": [
+    17,
+    3
+   ],
+   "id": "confirmation",
+   "label": "Confirmation required",
+   "kind": "check",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "17.4",
+   "sort": [
+    17,
+    4
+   ],
+   "id": "confirmation_charges",
+   "label": "Confirmation charges",
+   "kind": "radio",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    4,
+    4,
+    0
+   ]
+  },
+  {
+   "number": "17.5",
+   "sort": [
+    17,
+    5
+   ],
+   "id": "post_shipment_financing",
+   "label": "Please provide us with post-shipment financing under Documentary Credit (\"TR/BRP\") financing for 100% value of all documentary presentations made in compliance with this DC, but where there are discrepancies, we hereby agree to waive all such discrepancies",
+   "kind": "check",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "17.6",
+   "sort": [
+    17,
+    6
+   ],
+   "id": "financing_type",
+   "label": "Financing",
+   "kind": "radio",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "17.7",
+   "sort": [
+    17,
+    7
+   ],
+   "id": "financing_currency",
+   "label": "Foreign currency financing in (type of currency)",
+   "kind": "select",
+   "qr": [
+    0,
+    0,
+    0
+   ],
+   "ai": [
+    2,
+    2,
+    0
+   ]
+  },
+  {
+   "number": "17.8",
+   "sort": [
+    17,
+    8
+   ],
+   "id": "forward_contract_no",
+   "label": "Forward contract no",
+   "kind": "text",
+   "qr": [
+    1,
+    1,
+    0
+   ],
+   "ai": [
+    2,
+    2,
+    0
+   ]
+  },
+  {
+   "number": "17.9",
+   "sort": [
+    17,
+    9
+   ],
+   "id": "advance_payment",
+   "label": "We authorise you to debit DC amount in full from our account for advance payment",
+   "kind": "check",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "17.10",
+   "sort": [
+    17,
+    10
+   ],
+   "id": "advance_payment_account",
+   "label": "Account no for advance payment",
+   "kind": "account",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "17.11",
+   "sort": [
+    17,
+    11
+   ],
+   "id": "debit_issuance_charges",
+   "label": "Please debit all DC issuance charges to our account with you",
+   "kind": "check",
+   "qr": [
+    2,
+    2,
+    0
+   ],
+   "ai": [
+    5,
+    5,
+    0
+   ]
+  },
+  {
+   "number": "17.12",
+   "sort": [
+    17,
+    12
+   ],
+   "id": "issuance_charges_account",
+   "label": "Account no for DC issuance charges",
+   "kind": "account",
+   "qr": [
+    4,
+    4,
+    0
+   ],
+   "ai": [
+    10,
+    10,
+    0
+   ]
+  },
+  {
+   "number": "18.1",
+   "sort": [
+    18,
+    1
+   ],
+   "id": "authorised_person",
+   "label": "Name and title of authorised person(s)",
+   "kind": "text",
+   "qr": [
+    3,
+    3,
+    0
+   ],
+   "ai": [
+    7,
+    7,
+    0
+   ]
+  }
+ ]
+}

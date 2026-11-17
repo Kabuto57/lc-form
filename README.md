@@ -96,6 +96,7 @@ put a file in the wrong place.
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows. Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
 | `acrobat_js.py` | The JavaScript Acrobat runs inside the PDF: `DOCUMENT_JS` (rules engine, QR code text, QR encoder) and `BUTTON_JS` (one entry per button). Plain ASCII only. | To change how answers are checked or what a button does |
 | `read_qr.py` | **Reads the QR code(s)** from scanned images (or text from a handheld scanner), joins two codes, re-checks every answer against the form file, and saves the result as JSON in `out/`. Not needed to build. | The Bank's side |
+| `benchmark/` | **QR code vs AI test** (not needed to build): 10 fake filled-in LC scans (typed with QR, handwritten; clean / medium / poor), read by the QR code and by Gemini 3.7 Flash, scored per form and per field. Report: `benchmark/LC-QR-vs-AI.xlsx`; pictures in `benchmark/screenshots/`; how to re-run in `benchmark/README.md`. | To compare QR with AI |
 | `GUIDE.md` | Step-by-step guide for beginners, including copying the files to a work computer and fixing common problems. | Everyone, first |
 | `README.md` | This reference. | When you need the details |
 | `requirements.txt` | pikepdf and its three dependencies (to build), and zxing-cpp (to read QR codes), at exact versions. | Setup |
@@ -703,3 +704,8 @@ layout: box widths are worked out from the label and `max`.
     again). `lc_form.py` alone now matches `eblc_form.py`: the "WHAT YOU CAN CUSTOMISE" list at the top, the
     sections written inside `FORM`, and no `half=` (it did nothing). The LC PDF's pages and fields are in exactly
     the same places; the other forms build byte-identical PDFs.
+23. **QR code vs AI test (`benchmark/`).** 10 fake LC applications (4 typed with their QR code, 6 handwritten;
+    clean, medium and poor scans) read back by the QR code and by Gemini 3.7 Flash. QR: every answer right on all 4
+    typed forms, about 0.04 s a form. Gemini: 599 of 602 answers right (99.5%), 8 of 10 forms fully right, about
+    39 s a form (22 to 76 s); its 3 errors were pick-one circles on poor scans, with no warning. Results, per-field
+    accuracy and pictures in `benchmark/LC-QR-vs-AI.xlsx`. The form files are unchanged.

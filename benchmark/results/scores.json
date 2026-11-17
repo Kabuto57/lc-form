@@ -1,0 +1,194 @@
+{
+ "QR code": {
+  "01-typed-clean": {
+   "correct": 58,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 58,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 0.061
+  },
+  "02-typed-clean": {
+   "correct": 51,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 51,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 0.048
+  },
+  "03-typed-medium": {
+   "correct": 65,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 65,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 0.028
+  },
+  "04-typed-poor": {
+   "correct": 58,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 58,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 0.015
+  }
+ },
+ "gemini-3.7-flash": {
+  "01-typed-clean": {
+   "correct": 58,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 58,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 72.79
+  },
+  "02-typed-clean": {
+   "correct": 51,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 51,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 34.12
+  },
+  "03-typed-medium": {
+   "correct": 65,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 65,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 33.82
+  },
+  "04-typed-poor": {
+   "correct": 56,
+   "wrong": 1,
+   "missed": 1,
+   "invented": 0,
+   "answered": 58,
+   "problems": [
+    [
+     "wrong",
+     "gst",
+     "inclusive of GST",
+     "No GST"
+    ],
+    [
+     "missed",
+     "price_basis",
+     "CPT",
+     null
+    ]
+   ],
+   "errors": 2,
+   "accuracy": 96.6,
+   "all_questions": 98.1,
+   "seconds": 41.35
+  },
+  "05-hand-clean": {
+   "correct": 69,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 69,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 23.14
+  },
+  "06-hand-clean": {
+   "correct": 57,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 57,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 76.14
+  },
+  "07-hand-medium": {
+   "correct": 56,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 56,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 22.38
+  },
+  "08-hand-medium": {
+   "correct": 63,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 63,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 27.02
+  },
+  "09-hand-poor": {
+   "correct": 70,
+   "wrong": 0,
+   "missed": 1,
+   "invented": 0,
+   "answered": 71,
+   "problems": [
+    [
+     "missed",
+     "term_prepay",
+     "You may not prepay the acceptance of this term LC",
+     null
+    ]
+   ],
+   "errors": 1,
+   "accuracy": 98.6,
+   "all_questions": 99.1,
+   "seconds": 29.18
+  },
+  "10-hand-poor": {
+   "correct": 54,
+   "wrong": 0,
+   "missed": 0,
+   "invented": 0,
+   "answered": 54,
+   "problems": [],
+   "errors": 0,
+   "accuracy": 100.0,
+   "all_questions": 100.0,
+   "seconds": 26.84
+  }
+ }
+}
