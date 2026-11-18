@@ -9,6 +9,7 @@ lc-form/
   eblc_form.py, obc_form.py, bg_form.py ...   <- the other trade forms (12), redrawn from the old smart form.
                        Build any of them the same way:  python build.py bg_form.py
   build.py          <- RUN THIS:  python build.py lc_form.py
+  build_all.py      <- or this, for every form in one PDF with a main menu:  python build_all.py
   layout.py         \
   pdf_writer.py      > the engine: the same for every form. Never edit these.
   acrobat_js.py     /

@@ -92,6 +92,9 @@ put a file in the wrong place.
 | `example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
 | `eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
 | `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them in one folder. | Anyone changing those forms |
+| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`, a copy in `dist/`): a main menu page (Import / Export / Loans / Guarantees) linking to all 13 forms, each form with a Main menu button on every page, the terms and conditions after the LC, EBLC and OBC forms, and bookmarks. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
+| `terms.json` | The terms and conditions text of the LC, EBLC and OBC forms (from the old smart form, via `smartform/make_terms.py`). | To change the terms |
+| `dist/Trade-Application-Forms.pdf` | The last full PDF built by `build_all.py`, kept in the repository so it can be downloaded from GitHub. | Everyone |
 | `smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu. | Developers |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
@@ -731,4 +734,11 @@ layout: box widths are worked out from the label and `max`.
     radio options wrap. The LC, example and other existing forms build as before. Not carried over: hidden parts the
     old form never showed; "add a row" tables are 3 fixed rows; the old BG branch list that changed with the entity
     lists every branch; the bills of exchange are their own forms instead of being filled from EBLC / OBC answers;
-    the terms and conditions pages and the menu page are not built yet.
+    the terms pages and the menu are in the one-PDF build (item 25).
+25. **One PDF with a main menu, like the old smart form.** `build_all.py` builds all 13 forms and joins them: a
+    menu page, every form with a Main menu button, the LC / EBLC / OBC terms and conditions (`terms.json`, read
+    from the old form by `smartform/make_terms.py`), and bookmarks (46 pages). Each form's fields are renamed under
+    its code (`BG.applicant_name`) and its scripts rewritten to match (`lcRules_BG` ...), so Check form, Reset form,
+    Generate QR Code and Print Form work on that form only, and its QR code holds only its answers, with the same
+    question ids as the form built on its own. Checked: every script in the PDF is rewritten; all 13 forms' scripts
+    run together (in Node, against the PDF's fields) and stay separate; the amount in words and the date checks work.
