@@ -11,6 +11,7 @@ lc-form/
                          Build any of them the same way:  python build.py bg_form.py
   build.py          <- RUN THIS:  python build.py lc_form.py
   build_all.py      <- or this, for every form in one PDF with a main menu:  python build_all.py
+                       (click a form on the menu and only that form is shown; needs Acrobat with JavaScript on)
   layout.py         \
   pdf_writer.py      > the engine: the same for every form. Never edit these.
   acrobat_js.py     /
