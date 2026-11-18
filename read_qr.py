@@ -171,7 +171,7 @@ def check_answers(form, payload):
             elif re.search(BAD_CHARS, answer):
                 problems.append(f"{name(qid)}: has characters the form doesn't allow")
 
-    problems += checks_across(data, payload.get("saved", ""), questions, name)
+    problems += checks_across(data, payload.get("saved", ""), questions, name, form.get("checks"))
     if payload.get("truncated"):
         warnings.append("shortened to fit the QR codes (the full text is only in the PDF): "
                         + ", ".join(name(k) for k in payload["truncated"] if k in questions))
@@ -180,7 +180,7 @@ def check_answers(form, payload):
     return problems, warnings
 
 
-def checks_across(data, saved, questions, name):
+def checks_across(data, saved, questions, name, checks=None):
     """The same checks across answers as the form makes in Acrobat (acrobat_js.py, across()). Each is skipped
     when the form doesn't have those questions. "In the future" is measured from when the QR code was made."""
     out = []
@@ -199,6 +199,16 @@ def checks_across(data, saved, questions, name):
         out.append(f"{name('amount')}: must be more than zero")
     if data.get("insurance_arrangement") and data.get("price_basis") in ("CIF", "CIP") and "insurance_arrangement" in questions:
         out.append(f"{name('insurance_arrangement')}: is only for FOB/CFR/FCA/CPT, but price basis is {data['price_basis']}")
+    for c in checks or []:   # the form's own checks (FORM["checks"])
+        a, b = data.get(c["a"]), data.get(c.get("b"))
+        if c["t"] == "order" and to_date(a) and to_date(b) and (to_date(a) <= to_date(b) if c["s"] else to_date(a) < to_date(b)):
+            out.append(f"{name(c['a'])}: {c['m']}")
+        if c["t"] == "range" and isinstance(a, str) and re.fullmatch(r"[\d,]+(\.\d+)?", a) and not c["lo"] <= float(a.replace(",", "")) <= c["hi"]:
+            out.append(f"{name(c['a'])}: {c['m']}")
+        if c["t"] == "lengths" and isinstance(a, str) and re.sub(r"\D", "", a):
+            want = c["by"][b] if b in c["by"] else c["by"].get("*")
+            if want and len(re.sub(r"\D", "", a)) not in want:
+                out.append(f"{name(c['a'])}: {c['m']}")
     return out
 
 if __name__ == "__main__":

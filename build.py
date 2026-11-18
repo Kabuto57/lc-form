@@ -52,6 +52,7 @@ import sys
 #     beside=69.3                         label beside a box this wide, even when the label is long
 #     cols=12                             how much of the row it takes, out of 12: cols=12 whole row, cols=6 half,
 #                                         cols=4 a third. Leave it out to let the build choose (usually best)
+#     words=["amount", "currency"]        filled in by the form: the amount in words ("USD One Hundred only"), read-only
 #     half=True / half=False              kept in the PDF's copy of the form, but has no effect on the layout:
 #                                         box widths are worked out automatically from the label and max (use cols)
 # Sections:  section("Title", fields=[...]), plus
@@ -105,9 +106,30 @@ def answered(field):
     return [{"field": field, "values": [""], "not": True}]
 
 
+# Checks across answers, listed in FORM["checks"] (each is skipped while its answers are blank):
+#     not_before("expiry_date", "shipment_date", "Expiry date cannot be earlier than the latest shipment date")
+#     after("expiry_date", "effective_date", "...")          strictly later
+#     in_range("rate", 0, 100, "Please enter a value from 0 to 100")
+#     account_length("debit_acc", "debit_currency", {"SGD": [10], "*": [13]}, "Invalid account no.")   [] = not checked
+def not_before(later, earlier, message):
+    return {"t": "order", "a": later, "b": earlier, "s": 0, "m": message}
+
+
+def after(later, earlier, message):
+    return {"t": "order", "a": later, "b": earlier, "s": 1, "m": message}
+
+
+def in_range(field, low, high, message):
+    return {"t": "range", "a": field, "lo": low, "hi": high, "m": message}
+
+
+def account_length(field, currency, lengths, message):
+    return {"t": "lengths", "a": field, "b": currency, "by": lengths, "m": message}
+
+
 # ---- check_form: explains mistakes in a form file before anything is built -------------------------------------
 KINDS = ("text", "long", "date", "radio", "checks", "check", "select")
-QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols"}
+QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols", "words"}
 SECTION_OPTIONS = {"title", "fields", "note", "bankOnly", "signoff", "width", "new_page"}
 
 
@@ -117,6 +139,9 @@ def check_form(form, defaults, formats):
     def stop(message):
         raise SystemExit("PROBLEM IN THE FORM FILE: " + message)
 
+    for key in form:
+        if key not in ("title", "note", "issuer", "formCode", "sections", "checks"):
+            stop(f'FORM has an unknown setting "{key}".')
     for key in ("title", "sections"):
         if key not in form:
             stop(f'FORM has no "{key}".')
@@ -165,6 +190,14 @@ def check_form(form, defaults, formats):
                         if value not in choices:
                             stop(f'{name}: {option} waits for "{rule["field"]}" to be "{value}", but that is not one '
                                  f'of its options ({" / ".join(choices)}).')
+    for q, name in questions.values():
+        for other in q.get("words") or []:
+            if other not in questions:
+                stop(f'{name}: words refers to "{other}", but no question has that id.')
+    for c in form.get("checks") or []:
+        for key in ("a", "b"):
+            if c.get(key) and c[key] not in questions:
+                stop(f'FORM["checks"]: a check refers to "{c[key]}", but no question has that id.')
     for key, value in (defaults or {}).items():
         if key not in questions:
             stop(f'DEFAULTS gives an answer for "{key}", but no question has that id.')

@@ -90,7 +90,9 @@ put a file in the wrong place.
 |---|---|---|
 | `lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). | Anyone changing the form |
 | `example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
-| `eblc_form.py` | A 5-section demo form (Export Bills under Letter of Credit, Form EB-01, draft). Shows every kind of mandatory rule: always, when an answer is picked (Usance), when a box is ticked (each document), once another answer is given (FX contract). Uses `lc_form.py`'s currency list, so keep both in one folder. | Anyone making a new form |
+| `eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
+| `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them in one folder. | Anyone changing those forms |
+| `smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu. | Developers |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows. Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
@@ -203,10 +205,20 @@ drop-downs list the dates from a year back to two years ahead, so they change wi
 | `amount` | `0-9 . ,` | `^\d{1,3}(,?\d{3})*(\.\d{1,2})?$` (e.g. `480,000.00`) | is not an amount |
 | `phone` | `0-9 + ( ) - space` | at least one digit, an optional leading `+` | is not a phone number (digits, spaces, + - ( ) only) |
 | `account` | `0-9 -` | starts and ends with a digit | is not an account number (digits and - only) |
+| `cif` | `0-9` | 7 digits | should be your 7-digit C.I.F. number |
+| `ref12` | `0-9` | 12 digits | should be a 12-digit reference number |
+| `fx8` / `fx2` | `0-9` | 8 digits / 2 digits | FX contract number / sequence |
+| `swift` | letters, digits | 8 or 11 letters and digits | is not a SWIFT address |
 
 A wrong whole answer gets an alert when you leave the box, and the box refuses it.
 
 ### Checks across answers
+
+A form file can add its own checks in `FORM["checks"]` (helpers in `build.py`): `not_before` / `after` (one date not
+before / strictly after another), `in_range` (a number between two values) and `account_length` (an account number's
+length, by currency). They run in Acrobat (`across()` in `acrobat_js.py`) and in `read_qr.py`. A question with
+`words=["amount", "currency"]` is filled in by the form with the amount in words (the bills of exchange use it).
+The LC form's own checks:
 
 | Check | Reported on |
 |---|---|
@@ -709,3 +721,14 @@ layout: box widths are worked out from the label and `max`.
     typed forms, about 0.04 s a form. Gemini: 599 of 602 answers right (99.5%), 8 of 10 forms fully right, about
     39 s a form (22 to 76 s); its 3 errors were pick-one circles on poor scans, with no warning. Results, per-field
     accuracy and pictures in `benchmark/LC-QR-vs-AI.xlsx`. The form files are unchanged.
+24. **The other 12 trade forms.** The old vendor smart form's other application forms are now form files in this
+    project's look (`lc_amendment_form.py`, `eblc_form.py` (replaces the EB-01 demo), `obc_form.py`,
+    `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`,
+    `sblc_amendment_form.py` and the three bills of exchange). Their questions, wording, mandatory and conditional
+    rules come from the old form: read in Adobe Acrobat and found by trying every choice (`smartform/`), then reviewed
+    against the old scripts. The engine gained what they need: formats `cif`, `ref12`, `fx8`, `fx2`, `swift`; per-form
+    checks (`FORM["checks"]`: date order, ranges, account length by currency); the amount in words (`words=`); long
+    radio options wrap. The LC, example and other existing forms build as before. Not carried over: hidden parts the
+    old form never showed; "add a row" tables are 3 fixed rows; the old BG branch list that changed with the entity
+    lists every branch; the bills of exchange are their own forms instead of being filled from EBLC / OBC answers;
+    the terms and conditions pages and the menu page are not built yet.

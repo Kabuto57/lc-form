@@ -5,3 +5,5 @@ out/
 benchmark/.env
 benchmark/work/
 benchmark/old/
+smartform/anon.local.json
+smartform/acrobat/.*.js

@@ -66,6 +66,11 @@ FORMATS = {
     "amount": ("[^0-9.,]", r"^\d{1,3}(,?\d{3})*(\.\d{1,2})?$", "is not an amount"),
     "phone": ("[^0-9+() -]", r"^\+?[\d ()-]*\d[\d ()-]*$", "is not a phone number (digits, spaces, + - ( ) only)"),
     "account": ("[^0-9-]", r"^\d[\d-]*\d$|^\d$", "is not an account number (digits and - only)"),
+    "cif": ("[^0-9]", r"^\d{7}$", "should be your 7-digit C.I.F. number"),
+    "ref12": ("[^0-9]", r"^\d{12}$", "should be a 12-digit reference number (e.g. 553010012345)"),
+    "fx8": ("[^0-9]", r"^\d{8}$", "should be an 8-digit FX contract number"),
+    "fx2": ("[^0-9]", r"^\d{2}$", "should be a 2-digit FX contract sequence"),
+    "swift": ("[^A-Za-z0-9]", r"^[A-Za-z0-9]{8}([A-Za-z0-9]{3})?$", "is not a SWIFT address (8 or 11 letters and digits)"),
 }
 
 # Characters SWIFT messages can't carry (plus # & @ %, used in addresses and company names): refused while typing.
@@ -395,8 +400,10 @@ class Layout:
                     y -= 12
                 spots.append((cx, y))
                 cx += span
+                if span > w:   # wording longer than the row: it wraps (place_options), taking more lines
+                    y -= 11 * (len(wrap(o, TEXT, w - 12)) - 1)
             if draw:
-                self.place_options(q, options, answer, look, always_required, lambda i, _: (spots[i][0], spots[i][1] - 10.5, spots[i][1] - 9), x)
+                self.place_options(q, options, answer, look, always_required, lambda i, _: (spots[i][0], spots[i][1] - 10.5, spots[i][1] - 9), x, x + w)
             return top - y + 12
 
         # A text box, a paragraph box (taller) or a date.
@@ -407,7 +414,7 @@ class Layout:
             self.place_box(q, x, y - h, w, h, answer, look, always_required)
         return 10 + h
 
-    def place_options(self, q, options, answer, look, always_required, where, cx):
+    def place_options(self, q, options, answer, look, always_required, where, cx, right=None):
         """The option buttons of a question, each with its wording beside it.
         Pick one (radio) = one field with a widget per option. Tick any (checks) = one tick-box field per option,
         named id__0, id__1, ... where(i, cx) gives (box x, box y, text y) for option i."""
@@ -422,7 +429,9 @@ class Layout:
             else:
                 box = self.add_field(f"{q['id']}__{i}", "check", tooltip=f"{q['label']}: {o}", value=isinstance(answer, list) and o in answer)
                 self.add_widget(box, box_x, box_y, 9, 9, **look)
-            self.text(safe(o), box_x + 12, text_y, TEXT)
+            lines = wrap(o, TEXT, right - box_x - 12) if right and box_x + self.option_width(o) > right else [safe(o)]
+            for k, line in enumerate(lines):
+                self.text(line, box_x + 12, text_y - 11 * k, TEXT)
             cx = box_x + self.option_width(o)
         return cx
 
@@ -453,7 +462,7 @@ class Layout:
         else:
             text = safe(answer)[: q.get("max") or None] if isinstance(answer, str) and answer else ""
             box = self.add_field(q["id"], "text", tooltip=q["label"], required=always_required, multiline=q["kind"] == "long",
-                                 max=q.get("max"), value=text, size=TEXT)
+                                 max=q.get("max"), value=text, size=TEXT, **({"read_only": True} if q.get("words") else {}))
             # A starting answer too long for the box is drawn smaller.
             one_line = safe(answer).replace("\n", " ") if q["kind"] == "text" and isinstance(answer, str) else ""
             room = w - 6

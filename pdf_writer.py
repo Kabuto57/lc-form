@@ -92,6 +92,15 @@ def rules_table(layout):
         for r in active_rules(q):
             if r["field"] in by_id:
                 entry(by_id[r["field"]])
+    for q in [q for q in layout_questions if q.get("words")]:   # amounts in words, and the answers they are made from
+        entry(q)["words"] = q["words"]
+        for other in q["words"]:
+            if other in by_id:
+                entry(by_id[other])
+    for c in layout.form.get("checks") or []:   # questions the checks across answers read
+        for key in ("a", "b"):
+            if c.get(key) in by_id:
+                entry(by_id[c[key]])
     for q in [q for q in layout_questions if q["kind"] in ("text", "long", "date")]:   # typed answers are checked
         entry(q)["check"] = [FORMATS[q["format"]][1], FORMATS[q["format"]][2]] if q.get("format") else 1
     return {q["id"]: table[q["id"]] for q in layout_questions if q["id"] in table}
@@ -106,7 +115,8 @@ def document_script(layout, table):
     return script("document", MODEL=js_json(table), DATES=js_json([q["id"] for q in questions if q["kind"] == "date"]),
                   GROUPS=tick_any, LONG=js_json([q["id"] for q in questions if q["kind"] == "long"]),
                   FORM=json.dumps(code.group(0) if code else safe(form["title"]), ensure_ascii=False),
-                  VERSION=json.dumps(version.group(1) if version else "1"))
+                  VERSION=json.dumps(version.group(1) if version else "1"),
+                  CHECKS=js_json([{k: (safe(v) if k == "m" else v) for k, v in c.items()} for c in form.get("checks") or []]))
 
 
 def add_scripts(layout):

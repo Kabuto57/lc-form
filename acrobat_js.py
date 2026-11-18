@@ -71,6 +71,13 @@ function across() {
   if (A && A.getTime() > new Date().getTime()) X.application_date = "is in the future";
   if (/^[\d,]+(\.\d+)?$/.test(a) && !(Number(a.replace(/,/g, "")) > 0)) X.amount = "must be more than zero";
   if (v("insurance_arrangement") && (pb == "CIF" || pb == "CIP")) X.insurance_arrangement = "is only for FOB/CFR/FCA/CPT, but price basis is " + pb + " (the beneficiary insures)";
+  // The form's own checks (FORM["checks"] in the form file).
+  var C = __CHECKS__, c, p, q, n, want;
+  for (var j = 0; j < C.length; j++) { c = C[j];
+    if (c.t == "order") { p = day(v(c.a)); q = day(v(c.b)); if (p && q && (c.s ? p <= q : p < q)) X[c.a] = c.m; }
+    if (c.t == "range") { n = v(c.a); if (/^[\d,]+(\.\d+)?$/.test(n)) { n = Number(n.replace(/,/g, "")); if (n < c.lo || n > c.hi) X[c.a] = c.m; } }
+    if (c.t == "lengths") { n = v(c.a).replace(/\D/g, ""); want = c.by.hasOwnProperty(v(c.b)) ? c.by[v(c.b)] : c.by["*"]; if (n && want && want.length && !has(want, n.length)) X[c.a] = c.m; }
+  }
   return X;
 }
 
@@ -105,12 +112,27 @@ for (id in M) {
     f.fillColor = problem ? ["RGB", 1, 0.88, 0.88] : m.underlined ? color.transparent : color.white;
   }
 }
+// Amounts in words (a question with words: [amount id, currency id]), as the old bill of exchange wrote them.
+for (id in M) if (M[id].words && (f = d.getField(id))) { i = lcWords(v(M[id].words[0]), v(M[id].words[1] || "")); if (f.value != i) f.value = i; }
 } catch (e) { console.println("lcRules: " + e); }
 missing.bad = bad;
 missing.first = first; // the field of the first problem, for "Check form" to go to
 return missing;
 }
 
+// "1,250.50", "USD" -> "USD One Thousand Two Hundred Fifty and Fifty cents only" ("" while the amount is blank).
+function lcWords(a, ccy) {
+  var D = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"],
+      T = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"], G = ["", " Thousand", " Million", " Billion", " Trillion"];
+  var s = String(a).replace(/[, ]/g, ""), m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(s), out = [], n, g, k;
+  if (!m) return "";
+  function three(x) { var h = Math.floor(x / 100), r = x % 100, w = [];
+    if (h) w.push(D[h] + " Hundred"); if (r >= 20) w.push(T[Math.floor(r / 10)] + (r % 10 ? " " + D[r % 10] : "")); else if (r) w.push(D[r]); return w.join(" "); }
+  function words(t) { t = t.replace(/^0+/, ""); if (!t) return "Zero"; var parts = []; for (g = 0; t.length; g++) { n = +t.slice(-3); t = t.slice(0, -3); if (n) parts.unshift(three(n) + G[g]); } return parts.join(" "); }
+  k = words(m[1]);
+  if (m[2] && +m[2]) k += " and " + words(m[2].length == 1 ? m[2] + "0" : m[2]) + " cents";
+  return (ccy ? ccy + " " : "") + k + " only";
+}
 // Acrobat only: show each date's calendar box and hide its drop-down list.
 function lcDates(d) {
   var D = __DATES__, i, t, p;
