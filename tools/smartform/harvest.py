@@ -1,6 +1,6 @@
 """Reads the vendor's smart form in Adobe Acrobat and saves what the converter needs (data/raw/, not committed).
 
-    python smartform/harvest.py ~/Downloads/Trade-Smartform.pdf [SECTION ...]
+    python tools/smartform/harvest.py ~/Downloads/Trade-Smartform.pdf [SECTION ...]
 
 Needs Adobe Acrobat on a Mac (it is driven with AppleScript's "do script"). The vendor PDF is opened hidden, so
 nothing appears on screen. For each section it saves:

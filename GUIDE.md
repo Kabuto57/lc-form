@@ -4,10 +4,11 @@ You don't need to know how to program. You edit **one file** (a form file), run 
 
 ```
 lc-form/
-  lc_form.py        <- THE LC FORM. To change the LC form, edit this file only.
-  example_form.py   <- a small example. Copy it to start a new form.
-  eblc_form.py, obc_form.py, bg_form.py ...   <- the other trade forms (12), redrawn from the old smart form.
-                       Build any of them the same way:  python build.py bg_form.py
+  forms/            <- EVERY FORM FILE IS IN HERE
+    lc_form.py        <- THE LC FORM. To change the LC form, edit this file only.
+    example_form.py   <- a small example. Copy it to start a new form.
+    eblc_form.py, obc_form.py, bg_form.py ...   <- the other trade forms (12), redrawn from the old smart form.
+                         Build any of them the same way:  python build.py bg_form.py
   build.py          <- RUN THIS:  python build.py lc_form.py
   build_all.py      <- or this, for every form in one PDF with a main menu:  python build_all.py
   layout.py         \
@@ -15,20 +16,24 @@ lc-form/
   acrobat_js.py     /
   out/              <- the PDF appears here
   read_qr.py          reads the printed QR code(s) back (the Bank's side)
+  tools/smartform/    how the trade forms were copied from the old smart form (not needed to build)
+  benchmark/          the QR code vs AI reading test (not needed to build)
   GUIDE.md            this guide
   README.md           the full reference (rules, QR codes, security, history)
   requirements.txt    the library to install (pikepdf)
 ```
 
-**Building a PDF needs exactly 5 files in one folder:** the form file + `build.py`, `layout.py`, `pdf_writer.py`,
-`acrobat_js.py`. No sub-folders.
+**Building a PDF needs:** `build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py` in one folder, and the form
+file in a `forms` folder inside it (`forms/lc_form.py`). The other trade forms use `lc_form.py`'s currency list, so
+copy `forms/lc_form.py` too when you build them.
 
 ## 0. Getting the files onto a work computer
 
 Copy each file **exactly**. The safest way, for each file on GitHub:
 
 1. Open the file on GitHub and press the **Download raw file** button (the arrow, top right of the file).
-2. Save it into one folder, keeping its name (`build.py`, not `build.py.txt`).
+2. Save it keeping its name (`build.py`, not `build.py.txt`): engine files into one folder, form files into the
+   `forms` folder inside it.
 
 If you can only copy and paste: on GitHub press **Raw**, select everything (Ctrl+A), copy, and paste into a new file
 in a plain-text editor (Notepad or VS Code, not Word). Save as **UTF-8**.
@@ -112,7 +117,7 @@ The kinds of question: `text` (one line), `long` (paragraph), `date`, `radio` (p
 
 ## 3. Make a similar form
 
-1. Copy `example_form.py` to a new name that **ends in `_form.py`**, e.g. `trade_loan_form.py`, in the same folder.
+1. Copy `example_form.py` to a new name that **ends in `_form.py`**, e.g. `trade_loan_form.py`, in the `forms` folder.
    (Copy `lc_form.py` instead if the new form is close to the LC form.)
 2. Open it and change the parts marked `CHANGE`: the title, the issuer, the form code (e.g. `Form TL-01`; it must be
    different from every other form's), the sections and questions, `DEFAULTS` and `PDF_NAME`.

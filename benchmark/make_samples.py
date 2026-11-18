@@ -24,6 +24,7 @@ import zxingcpp
 HERE = os.path.dirname(os.path.abspath(__file__))
 LC = os.path.join(HERE, "..")
 sys.path.insert(0, LC)
+sys.path.insert(0, os.path.join(LC, "forms"))
 sys.dont_write_bytecode = True
 import lc_form                          # noqa: E402
 from layout import Layout, active_rules, holds  # noqa: E402

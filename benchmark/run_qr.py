@@ -12,6 +12,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, os.path.join(HERE, "..", "forms"))
 sys.dont_write_bytecode = True
 from read_qr import codes_in, join   # noqa: E402
 

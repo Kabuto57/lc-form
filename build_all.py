@@ -9,7 +9,7 @@ Builds each form file (the same way as build.py), then joins them into one PDF:
   - bookmarks for every form.
 Each form keeps its own rules and QR code: Check form, Reset form, Generate QR Code and Print Form work on that form
 only (its fields are renamed "LC.applicant_name", "BG.applicant_name" ..., and its scripts are made to match).
-Needs the form files below and the 5 engine files in this folder. No terms and conditions pages: the old form has them
+Needs the form files below (in forms/) and the engine files in this folder. No terms and conditions pages: the old form has them
 but every one of its scripts keeps them hidden, so users never saw them.
 """
 import io
@@ -128,7 +128,7 @@ def main():
     entries, fields, recalcs, scripts, outline = [], [], [], [], []
     for group, forms in MENU:
         for file, code in forms:
-            spec = load_form(os.path.join(HERE, file))
+            spec = load_form(file)   # from the forms folder
             check_form(spec.FORM, spec.DEFAULTS, FORMATS)
             src = pikepdf.open(io.BytesIO(build(spec.FORM, spec.DEFAULTS)))
             first = len(out.pages)
@@ -205,9 +205,6 @@ def main():
     assert not problems, problems
     tops = [str(f.T) for f in check.Root.AcroForm.Fields]
     assert len(tops) == len(set(tops)) == len(entries), tops
-    os.makedirs(os.path.join(HERE, "dist"), exist_ok=True)
-    with open(OUT, "rb") as src_file, open(os.path.join(HERE, "dist", "Trade-Application-Forms.pdf"), "wb") as copy:
-        copy.write(src_file.read())   # a copy that is kept in the repository (out/ is not)
     print(f"Wrote out/Trade-Application-Forms.pdf: {len(check.pages)} pages, {len(entries)} forms, menu page")
 
 

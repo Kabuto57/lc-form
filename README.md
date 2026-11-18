@@ -9,9 +9,11 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 - Needs Python 3.9 or later and **one library to build, pikepdf** (plus zxing-cpp to read QR codes). All its licences are permissive (no GPL/AGPL).
 - **New to this? Read [GUIDE.md](GUIDE.md) first.** It shows, step by step, how to change the form and how to make a
   similar one, without needing to know Python.
-- **5 files build the PDF, all in one folder:** the form (`lc_form.py`, the only one you edit) and four engine files
-  that are the same for every form (`build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py`). One command builds
-  the PDF and checks it.
+- **A form file plus 4 engine files build the PDF:** the form (`forms/lc_form.py`, the only one you edit) and four
+  engine files that are the same for every form (`build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py`). One
+  command builds the PDF and checks it.
+- **Folders:** the engine files at the top; every form file in `forms/`; `tools/smartform/` holds the tools that
+  copied the old smart form (not needed to build); `benchmark/` is the QR code vs AI reading test.
 
 ## Run it
 
@@ -46,8 +48,8 @@ dates are plain drop-down lists, and Check form says "The form's checks did not 
 
 ```
                  ┌──────────────────────────────────────────────────────────────┐
-  lc_form.py     │ THE FORM (what it asks): 108 questions, options and rules    │  ← you edit this
-  (a form file)  │ FORM, DEFAULTS, and the settings PDF_NAME, PAGES             │
+  forms/         │ THE FORM (what it asks): 108 questions, options and rules    │  ← you edit this
+  lc_form.py     │ FORM, DEFAULTS, and the settings PDF_NAME, PAGES             │
                  └──────────────────────────────┬───────────────────────────────┘
                                                 ▼  python build.py lc_form.py
                  ┌──────────────────────────────────────────────────────────────┐
@@ -78,23 +80,22 @@ dates are plain drop-down lists, and Check form says "The form's checks did not 
                  └──────────────────────────────────────────────────────────────┘
 ```
 
-**Why 5 files, all Python, in one folder.** A form-maker opens only the form file. The engine is the same for every
+**Why so few files, all Python.** A form-maker opens only the form file. The engine is the same for every
 form, split into one file per step so each stays readable. The JavaScript is kept inside a Python file
 (`acrobat_js.py`), not in separate `.js` files: copying the project by hand then can't leave the scripts behind,
-and if a file is cut short Python refuses to run instead of producing a broken form. No sub-folders, so a copy can't
-put a file in the wrong place.
+and if a file is cut short Python refuses to run instead of producing a broken form. One folder, `forms/`, for the
+form files: `python build.py lc_form.py` looks there, and says so if the file isn't found.
 
 ## Files
 
 | File | Purpose | Who opens it |
 |---|---|---|
-| `lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). | Anyone changing the form |
-| `example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
-| `eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
-| `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them in one folder. | Anyone changing those forms |
-| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`, a copy in `dist/`): a main menu page (Import / Export / Loans / Guarantees) linking to all 13 forms, each form with a Main menu button on every page, and bookmarks. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
-| `dist/Trade-Application-Forms.pdf` | The last full PDF built by `build_all.py`, kept in the repository so it can be downloaded from GitHub. | Everyone |
-| `smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu. | Developers |
+| `forms/lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). | Anyone changing the form |
+| `forms/example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
+| `forms/eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
+| `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
+| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) linking to all 13 forms, each form with a Main menu button on every page, and bookmarks. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
+| `tools/smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu (`out/Trade-Application-Forms-old-look.pdf`). | Developers |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows. Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
@@ -109,12 +110,12 @@ put a file in the wrong place.
 
 | You want to change | Edit |
 |---|---|
-| A question's wording, options, mandatory rule, max length or format | `lc_form.py` |
+| A question's wording, options, mandatory rule, max length or format | `forms/lc_form.py` |
 | How wide a section is, or start it on a new page | `width="full"` / `width="half"` / `new_page=True` on its `section(...)` in the form file |
 | How wide one question is (e.g. a whole row) | add `cols=12` (or `cols=6` for half) to its line in the form file |
-| Add or remove a question | `lc_form.py` (nothing else: the checks follow the form) |
-| The number of pages the form must fit on | `PAGES` in `lc_form.py` |
-| Make a new form | copy `example_form.py` to `<name>_form.py` (see [GUIDE.md](GUIDE.md)) |
+| Add or remove a question | `forms/lc_form.py` (nothing else: the checks follow the form) |
+| The number of pages the form must fit on | `PAGES` in `forms/lc_form.py` |
+| Make a new form | copy `forms/example_form.py` to `forms/<name>_form.py` (see [GUIDE.md](GUIDE.md)) |
 | Colours, text sizes, spacing, margins, answer formats | `layout.py`, section 1 |
 | How sections and questions are arranged | `layout.py`, section 4 |
 | How the form checks answers in Acrobat | `DOCUMENT_JS` in `acrobat_js.py` |
@@ -561,7 +562,7 @@ What it does:
 2. **Joins two codes.** The order is the one that makes valid JSON (code 1 of 2 always starts the JSON), so the
    images can be given in any order. If only one of two codes is found, it says "Scan both". The same code
    scanned twice counts once.
-3. **Finds the form file** (`*_form.py`, beside `read_qr.py`) whose form code matches the QR code's `"form"` (e.g. `LC-01`), and warns if the
+3. **Finds the form file** (`forms/*_form.py`) whose form code matches the QR code's `"form"` (e.g. `LC-01`), and warns if the
    form version differs.
 4. **Re-checks every answer** (`check_answers`, at the end of `read_qr.py`), because a QR code comes from outside the Bank and could have
    been made or edited by anyone: unknown answers, wrong kinds of value, options that don't exist, lengths over
@@ -613,9 +614,9 @@ or a script, also test the PDF in Acrobat:
 
 See **[GUIDE.md](GUIDE.md)**: it covers both step by step, with a table of common changes.
 
-In short: edit `lc_form.py` (one line per question; a cheat sheet is at the top of the file, and every kind and
+In short: edit `forms/lc_form.py` (one line per question; a cheat sheet is at the top of the file, and every kind and
 option is listed in section 1 of `build.py`), then run `python build.py lc_form.py`. For a new form, copy
-`example_form.py` to `<name>_form.py`, change the parts marked `CHANGE`, and run `python build.py <name>_form.py`.
+`forms/example_form.py` to `forms/<name>_form.py`, change the parts marked `CHANGE`, and run `python build.py <name>_form.py`.
 
 If you changed questions, also update their rows in [Every question](#every-question) above, and tell the Bank's
 system team about new or renamed ids (they read the QR code's answers by id).
@@ -743,3 +744,9 @@ layout: box widths are worked out from the label and `max`.
 26. **No terms and conditions pages.** The old smart form has LC, EBLC and OBC terms pages, but every one of its
     scripts keeps them hidden (none ever shows them), so users never saw them. They are left out of the one-PDF build
     (`terms.json` and `smartform/make_terms.py` removed; 46 pages down to 39).
+27. **Tidied into folders.** Form files moved to `forms/` (`python build.py lc_form.py` still works: build.py looks
+    in `forms/`, and form files there can still import each other, e.g. `from lc_form import CURRENCIES`). The tools
+    that copied the old smart form moved to `tools/smartform/` (its old-look builder now writes
+    `Trade-Application-Forms-old-look.pdf`, so it no longer overwrites `build_all.py`'s PDF). `dist/` is no longer
+    kept in git: build the full PDF with `python build_all.py`. The old draft `dc_amendment_form.py` (replaced by
+    `lc_amendment_form.py`) deleted. Every PDF is byte-identical to before the move.

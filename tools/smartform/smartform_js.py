@@ -9,7 +9,7 @@ import re
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from acrobat_js import DOCUMENT_JS as LC_JS   # noqa: E402  reuse lc-form's QR encoder
 
 QR_MATRIX = LC_JS[LC_JS.index("function lcQrMatrix("):LC_JS.index("// lcDrawQr(doc, text)")]

@@ -68,13 +68,13 @@ def join(texts):
 
 
 def find_form(code):
-    """The form file (*_form.py, beside this file) whose form code (e.g. "LC-01") matches the QR code's."""
-    for path in sorted(glob.glob(os.path.join(HERE, "*_form.py"))):
+    """The form file (forms/*_form.py) whose form code (e.g. "LC-01") matches the QR code's."""
+    for path in sorted(glob.glob(os.path.join(HERE, "forms", "*_form.py"))):
         spec = load_form(path)
         found = re.search(r"[A-Z]+-\d+", spec.FORM.get("formCode") or "")
         if found and found.group(0) == code:
             return spec
-    raise SystemExit(f'The QR code is for form "{code}", but no form file (*_form.py) beside read_qr.py has that form code.')
+    raise SystemExit(f'The QR code is for form "{code}", but no form file (forms/*_form.py) has that form code.')
 
 
 def main(paths):

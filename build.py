@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """BUILD A FORM AS A FILLABLE PDF.      python build.py lc_form.py      ->  out/LC-Application.pdf
 
-THE 5 FILES THAT BUILD A FORM (keep them together in one folder)
-    lc_form.py      WHAT the form asks: one line per question. The only file you change for the LC form.
-                    To make a new form, copy example_form.py (small) or lc_form.py, and change the questions.
+THE FILES THAT BUILD A FORM (the engine files together in one folder, the form files in its forms/ folder)
+    forms/lc_form.py  WHAT the form asks: one line per question. The only file you change for the LC form.
+                    To make a new form, copy forms/example_form.py (small) or forms/lc_form.py, and change the
+                    questions. "python build.py lc_form.py" finds it in forms/.
     build.py        THIS FILE. Run it. Its first section lists every kind of question and every option.
     layout.py       Step 1: where everything goes on the page (and the colours, sizes and answer formats).
     pdf_writer.py   Steps 2 and 3: adds the checks and buttons, writes the PDF, then checks the PDF.
@@ -225,10 +226,17 @@ except (SyntaxError, ImportError) as e:
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+FORMS = os.path.join(HERE, "forms")
+
+
 def load_form(path):
-    """The form file as a module, with the optional names filled in."""
+    """The form file as a module, with the optional names filled in. "lc_form.py" means forms/lc_form.py."""
+    if not os.path.exists(path) and os.path.exists(os.path.join(FORMS, path)):
+        path = os.path.join(FORMS, path)
     if not os.path.exists(path):
-        raise SystemExit(f"No form file called {path}. Form files sit beside build.py, e.g.  python build.py lc_form.py")
+        raise SystemExit(f"No form file called {path}. Form files sit in the forms folder, e.g.  python build.py lc_form.py")
+    if FORMS not in sys.path:
+        sys.path.insert(0, FORMS)   # form files import each other ("from lc_form import CURRENCIES")
     loader = importlib.util.spec_from_file_location("form_file", path)
     spec = importlib.util.module_from_spec(loader)
     try:
@@ -273,4 +281,4 @@ def main(form_path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "lc_form.py"))
+    main(sys.argv[1] if len(sys.argv) > 1 else "lc_form.py")

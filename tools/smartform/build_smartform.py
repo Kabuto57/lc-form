@@ -1,6 +1,6 @@
 """BUILD: data/forms.json -> out/Trade-Application-Forms.pdf, one PDF with the menu and all 13 forms.
 
-    python smartform/build_smartform.py [--only LC]
+    python tools/smartform/build_smartform.py [--only LC]
 
 Each form looks like the vendor's (same layout, wording and page count, drawn from what Acrobat showed), but is an
 ordinary fillable PDF (AcroForm) with Acrobat JavaScript: no XFA, no Reader Extensions, no barcode feature needed.
@@ -22,7 +22,8 @@ import pikepdf
 from pikepdf import Array, Dictionary, Name, String
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(HERE))
+ROOT = os.path.dirname(os.path.dirname(HERE))   # lc-form
+sys.path.insert(0, ROOT)
 from layout import fmt, js_json, num, pdf_string, safe, width   # noqa: E402
 from pdf_writer import Writer   # noqa: E402
 from smartform_js import BUTTON_JS, DOCUMENT_JS   # noqa: E402
@@ -30,7 +31,7 @@ from smartform_js import BUTTON_JS, DOCUMENT_JS   # noqa: E402
 PAGE_W, PAGE_H = 595.28, 841.89
 MM = 72 / 25.4
 VERSION = "1.0"
-OUT = os.path.join(os.path.dirname(HERE), "out", "Trade-Application-Forms.pdf")
+OUT = os.path.join(ROOT, "out", "Trade-Application-Forms-old-look.pdf")   # build_all.py writes Trade-Application-Forms.pdf
 # Page order: as the old menu lists the forms. A form's terms and its bill of exchange follow it.
 ORDER = ["LC", "LC_Amendment", "EBLC", "OBC", "BEGeneric", "DBRP", "EXPORT", "BG", "SBLC", "BGA", "SBLCA"]
 AFTER = {"EBLC": ["BEEBLC"], "OBC": ["BEOBC"]}

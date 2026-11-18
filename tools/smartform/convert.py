@@ -1,6 +1,6 @@
 """CONVERT: the vendor form's layout, styling and rules -> data/forms.json (what build_smartform.py draws).
 
-    python smartform/convert.py [path/to/template.xml]
+    python tools/smartform/convert.py [path/to/template.xml]
 
 Reads data/raw/ (from harvest.py: where Acrobat drew everything, and the rules found by probing) and the XFA
 template (from trade-smartform-extract, already anonymised: the fonts, borders, captions, lists and scripts).
@@ -20,7 +20,8 @@ from xfa import MM, Template, child, kids, length, tag
 HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(HERE, "data", "raw")
 TEMPLATE = os.path.expanduser("~/Documents/trade-smartform-extract/xfa/template.xml")
-sys.path.insert(0, os.path.dirname(HERE))
+ROOT = os.path.dirname(os.path.dirname(HERE))   # lc-form
+sys.path.insert(0, ROOT)
 from layout import width as text_width   # noqa: E402  Helvetica letter widths (Arial has the same widths)
 
 AREA = {"Page1": (12 * MM, 28.325 * MM), "Page2": (3 * MM, 4 * MM)}   # where each page's content area starts

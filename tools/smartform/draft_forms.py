@@ -1,11 +1,11 @@
 """DRAFT FORM FILES: data/forms.json (the old forms' questions and probed rules) -> drafts/<name>_form.py.
 
-    python smartform/draft_forms.py
+    python tools/smartform/draft_forms.py
 
 Writes one form file per old form, in lc-form's format (the same as lc_form.py), as a starting point: every question
 in the old form's order, its wording, kind, options, length limit, format, and its mandatory / conditional rules as
 found by probing the old form. Each draft is then reviewed by hand (labels, sections, rules the probe can't see)
-and copied to the repo's root as <name>_form.py.
+and copied to the repo's forms folder as <name>_form.py.
 """
 import json
 import os

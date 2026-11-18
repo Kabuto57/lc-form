@@ -23,6 +23,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, os.path.join(HERE, "..", "forms"))
 sys.dont_write_bytecode = True
 import lc_form   # noqa: E402
 
