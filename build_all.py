@@ -5,15 +5,15 @@
 Builds each form file (the same way as build.py), then joins them into one PDF:
   - page 1: the main menu (Import / Export / Loans / Guarantees). Click a form's name to go to it.
   - each form, as built on its own (questions, rules, Check form / Reset form, QR code page), plus a
-    "Main menu" button on every page; the terms and conditions pages follow the LC, EBLC and OBC forms.
+    "Main menu" button on every page.
   - bookmarks for every form.
 Each form keeps its own rules and QR code: Check form, Reset form, Generate QR Code and Print Form work on that form
 only (its fields are renamed "LC.applicant_name", "BG.applicant_name" ..., and its scripts are made to match).
-Needs the form files below and the 5 engine files in this folder. The terms text is in TERMS (read from the old form).
+Needs the form files below and the 5 engine files in this folder. No terms and conditions pages: the old form has them
+but every one of its scripts keeps them hidden, so users never saw them.
 """
 import io
 import warnings
-import json
 import os
 import re
 import sys
@@ -29,17 +29,16 @@ from pdf_writer import build
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out", "Trade-Application-Forms.pdf")
 
-# The menu, as the old smart form grouped it: (group, [(form file, code used in field names, terms pages)]).
+# The menu, as the old smart form grouped it: (group, [(form file, code used in field names)]).
 MENU = [
-    ("Import", [("lc_form.py", "LC", "LC"), ("lc_amendment_form.py", "LCA", None)]),
-    ("Export", [("eblc_form.py", "EBLC", "EBLC"), ("bill_of_exchange_eblc_form.py", "BEEBLC", None),
-                ("obc_form.py", "OBC", "OBC"), ("bill_of_exchange_obc_form.py", "BEOBC", None),
-                ("bill_of_exchange_form.py", "BE", None)]),
-    ("Loans", [("import_financing_form.py", "DBRP", None), ("export_financing_form.py", "EXP", None)]),
-    ("Guarantees", [("bg_form.py", "BG", None), ("sblc_form.py", "SBLC", None),
-                    ("bg_amendment_form.py", "BGA", None), ("sblc_amendment_form.py", "SBLCA", None)]),
+    ("Import", [("lc_form.py", "LC"), ("lc_amendment_form.py", "LCA")]),
+    ("Export", [("eblc_form.py", "EBLC"), ("bill_of_exchange_eblc_form.py", "BEEBLC"),
+                ("obc_form.py", "OBC"), ("bill_of_exchange_obc_form.py", "BEOBC"),
+                ("bill_of_exchange_form.py", "BE")]),
+    ("Loans", [("import_financing_form.py", "DBRP"), ("export_financing_form.py", "EXP")]),
+    ("Guarantees", [("bg_form.py", "BG"), ("sblc_form.py", "SBLC"),
+                    ("bg_amendment_form.py", "BGA"), ("sblc_amendment_form.py", "SBLCA")]),
 ]
-TERMS_FILE = os.path.join(HERE, "terms.json")   # {"LC": {"title": ..., "paragraphs": [...]}, ...}
 W, H, M = PAGE_WIDTH, PAGE_HEIGHT, MARGIN
 FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWords")
 
@@ -89,7 +88,7 @@ def rewrite_scripts(pdf, code, first, last):
 
 
 # ==================================================================================================================
-# PAGES OF OUR OWN: THE MENU AND THE TERMS
+# PAGES OF OUR OWN: THE MENU
 # ==================================================================================================================
 def text_op(s, x, y, size, bold=False, colour=(0, 0, 0)):
     return "BT /%s %s Tf %s rg %s %s Td (%s) Tj ET" % ("F2" if bold else "F1", fmt(size), " ".join(fmt(c) for c in colour),
@@ -119,41 +118,16 @@ def link(page, rect, target_page):
     page.obj.Annots = annots
 
 
-def terms_pages(out, terms):
-    """The terms and conditions in two columns of small text, as many pages as they need."""
-    size, lead, gap = 6.6, 7.9, 18
-    col_w = (W - 2 * M - gap) / 2
-    lines = []
-    for p in terms["paragraphs"]:
-        bold = p.isupper() and len(p) < 120
-        for i, ln in enumerate(wrap(p, size, col_w)):
-            lines.append((ln, bold))
-        lines.append(("", False))
-    pages, top, bottom = [], H - 72, 46
-    per_col = int((top - bottom) / lead)
-    while lines:
-        ops = header(terms["title"])
-        for col in range(2):
-            chunk, lines = lines[:per_col], lines[per_col:]
-            x = M + col * (col_w + gap)
-            for k, (ln, bold) in enumerate(chunk):
-                if ln:
-                    ops.append(text_op(ln, x, top - k * lead, size, bold))
-        pages.append(new_page(out, ops))
-    return pages
-
-
 # ==================================================================================================================
 # JOINING
 # ==================================================================================================================
 def main():
     warnings.filterwarnings("ignore", message="Copying pages")   # the fields are joined by hand below
-    terms = json.load(open(TERMS_FILE)) if os.path.exists(TERMS_FILE) else {}
     out = pikepdf.new()
     menu_page = new_page(out, [])
     entries, fields, recalcs, scripts, outline = [], [], [], [], []
     for group, forms in MENU:
-        for file, code, terms_key in forms:
+        for file, code in forms:
             spec = load_form(os.path.join(HERE, file))
             check_form(spec.FORM, spec.DEFAULTS, FORMATS)
             src = pikepdf.open(io.BytesIO(build(spec.FORM, spec.DEFAULTS)))
@@ -182,9 +156,6 @@ def main():
             title = spec.FORM["title"]
             entries.append((group, title, re.search(r"[A-Z]+-\d+", spec.FORM["formCode"]).group(0), first))
             outline.append((title, first))
-            if terms_key and terms_key in terms:
-                tp = terms_pages(out, terms[terms_key])
-                outline.append((terms[terms_key]["title"], out.pages.index(tp[0])))
 
     # the menu page
     ops = header("Trade Application Forms") + [text_op("Please select the form that you require. Each form has its own Check form, QR code and Print Form buttons.", M, H - 76, 9)]
@@ -237,7 +208,7 @@ def main():
     os.makedirs(os.path.join(HERE, "dist"), exist_ok=True)
     with open(OUT, "rb") as src_file, open(os.path.join(HERE, "dist", "Trade-Application-Forms.pdf"), "wb") as copy:
         copy.write(src_file.read())   # a copy that is kept in the repository (out/ is not)
-    print(f"Wrote out/Trade-Application-Forms.pdf: {len(check.pages)} pages, {len(entries)} forms, menu + terms pages")
+    print(f"Wrote out/Trade-Application-Forms.pdf: {len(check.pages)} pages, {len(entries)} forms, menu page")
 
 
 if __name__ == "__main__":
