@@ -17,6 +17,8 @@ WHAT YOU CAN CUSTOMISE (all in this file; every option is also listed in build.p
                           note="..."        text under the heading
                           bankOnly=True     shaded "For Bank Use Only" section
                           signoff=True      signature, date and company stamp lines (always the whole width)
+                          buttons=["check-form", "print-form"]   a row of buttons at its bottom right: any of
+                                            "check-form", "reset-form", "generate-qr", "print-form" (screen only)
     A QUESTION          text / long / date / radio / checks / check / select (id, label, ...) plus any of:
                           required=True                     always mandatory (red *)
                           requiredIf=ticked("x")            mandatory (and unlocked) only when tick box x is ticked
@@ -26,6 +28,7 @@ WHAT YOU CAN CUSTOMISE (all in this file; every option is also listed in build.p
                           max=35                            at most 35 characters (also sets the box width)
                           format="amount"                   amount / number / phone / account
                           cols=12                           width out of 12 columns: 12 whole row, 6 half, 4 a third
+                          height=80                         paragraph boxes (long) only: the box's height in points (50)
                                                             (no cols: the build picks from the label and max)
     LEFT OUT            width, new_page and cols are only for when you want something different: without them
                         layout.py lays the form out by itself. Colours and text sizes are the same on every form

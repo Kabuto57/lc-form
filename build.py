@@ -54,6 +54,7 @@ import sys
 #     cols=12                             how much of the row it takes, out of 12: cols=12 whole row, cols=6 half,
 #                                         cols=4 a third. Leave it out to let the build choose (usually best)
 #     words=["amount", "currency"]        filled in by the form: the amount in words ("USD One Hundred only"), read-only
+#     height=80                           paragraph boxes (long) only: the whole box this many points tall (default 50)
 #     half=True / half=False              kept in the PDF's copy of the form, but has no effect on the layout:
 #                                         box widths are worked out automatically from the label and max (use cols)
 # Sections:  section("Title", fields=[...]), plus
@@ -64,6 +65,11 @@ import sys
 #     width="half"                        half the page; two half sections in a row sit side by side
 #                                         (leave width out: the build puts two short, similar sections side by side)
 #     new_page=True                       starts on a new page
+#     buttons=["check-form", "print-form"]  a row of buttons at the bottom right of the section, each one of:
+#                                         "check-form" (Check form), "reset-form" (Reset form),
+#                                         "generate-qr" (Generate QR Code), "print-form" (Print Form).
+#                                         They do the same as the buttons every form already has (top right of every
+#                                         page, and on the QR code page), and show on screen only, not on paper.
 # Leave width, new_page and cols out and layout.py decides (usually best). Colours and text sizes are the same on
 # every form (red = mandatory): they are set in layout.py, section 1.
 #
@@ -130,8 +136,9 @@ def account_length(field, currency, lengths, message):
 
 # ---- check_form: explains mistakes in a form file before anything is built -------------------------------------
 KINDS = ("text", "long", "date", "radio", "checks", "check", "select")
-QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols", "words"}
-SECTION_OPTIONS = {"title", "fields", "note", "bankOnly", "signoff", "width", "new_page"}
+QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols", "words", "height"}
+SECTION_OPTIONS = {"title", "fields", "note", "bankOnly", "signoff", "width", "new_page", "buttons"}
+BUTTON_NAMES = ("check-form", "reset-form", "generate-qr", "print-form")
 
 
 def check_form(form, defaults, formats):
@@ -156,6 +163,9 @@ def check_form(form, defaults, formats):
             stop(f"{where} has no questions (fields=[...]).")
         if section.get("width") not in (None, "full", "half"):
             stop(f'{where}: width must be "full" or "half" (or leave it out to let the build choose).')
+        buttons = section.get("buttons")
+        if buttons is not None and (not isinstance(buttons, list) or any(b not in BUTTON_NAMES for b in buttons) or len(set(buttons)) < len(buttons)):
+            stop(f'{where}: buttons must be a list of different ones from {", ".join(BUTTON_NAMES)}, like buttons=["check-form"].')
         if section.get("width") == "half" and section.get("signoff"):
             stop(f'{where}: a signoff section needs the whole width (its signature, date and stamp lines). Remove width="half".')
         for qi, q in enumerate(section["fields"], 1):
@@ -175,6 +185,8 @@ def check_form(form, defaults, formats):
                 stop(f'{name}: unknown format "{q["format"]}". Allowed: {", ".join(formats)}.')
             if q.get("max") is not None and (not isinstance(q["max"], int) or q["max"] < 1):
                 stop(f"{name}: max must be a whole number of characters, like max=35.")
+            if q.get("height") is not None and (q["kind"] != "long" or not isinstance(q["height"], (int, float)) or not 20 <= q["height"] <= 600):
+                stop(f"{name}: height is for paragraph boxes (long) only, in points from 20 to 600, like height=80.")
             if q.get("cols") is not None and q["cols"] not in range(1, 13):
                 stop(f"{name}: cols must be a whole number from 1 to 12, like cols=12 (whole row) or cols=6 (half).")
             questions[q["id"]] = (q, name)

@@ -113,6 +113,8 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | A question's wording, options, mandatory rule, max length or format | `forms/lc_form.py` |
 | How wide a section is, or start it on a new page | `width="full"` / `width="half"` / `new_page=True` on its `section(...)` in the form file |
 | How wide one question is (e.g. a whole row) | add `cols=12` (or `cols=6` for half) to its line in the form file |
+| How tall a paragraph box is | add `height=80` (points, default 50) to its `long(...)` line |
+| Buttons inside a section (Check form, Reset form, Generate QR Code, Print Form) | `buttons=["check-form", "print-form"]` on its `section(...)`; what they do is `BUTTON_JS` in `acrobat_js.py` |
 | Add or remove a question | `forms/lc_form.py` (nothing else: the checks follow the form) |
 | The number of pages the form must fit on | `PAGES` in `forms/lc_form.py` |
 | Make a new form | copy `forms/example_form.py` to `forms/<name>_form.py` (see [GUIDE.md](GUIDE.md)) |
@@ -757,3 +759,10 @@ layout: box widths are worked out from the label and `max`.
     Needs Adobe Acrobat with JavaScript on; free Acrobat Reader may refuse to show or hide pages unless the PDF has
     Reader rights; without JavaScript only the menu page is visible. Checked in Acrobat: menu alone at open (1 page,
     38 templates); LC -> 5 pages, BG -> 4 pages with LC hidden; back to LC keeps its answers, QR code page last.
+29. **Section buttons and paragraph height (for the studio's canvas).** A section can add a row of buttons at its
+    bottom right: `buttons=["check-form", "reset-form", "generate-qr", "print-form"]` (any of these, each once). They
+    run the same scripts as the form's own buttons (`BUTTON_JS` in `acrobat_js.py`), show on screen only, and are
+    named `__s<section>_<button>` (e.g. `__s14_print_form`). A paragraph box can say how tall it is: `height=80`
+    (points; default 50). `check_form` refuses other button names and a height on anything but a paragraph. No form
+    file uses them yet, so every form builds byte-identical PDFs. PDF Template Studio's canvas sets both: drag a
+    question's edge, or tick a section's buttons.

@@ -166,6 +166,12 @@ def add_scripts(layout):
             row = layout.add_field(f"__qr{k}_{y}", "text", max=177, comb=True, appearance=font_size)
             layout.add_widget(row, x + 4 * module, y0 + size - (5 + y) * module, 177 * module, module)
 
+    # Buttons a section adds (buttons=[...] in the form file): what each does.
+    for field in layout.fields:
+        if field.get("script"):
+            for widget in field["widgets"]:
+                widget["action"] = script(field["script"])
+
     # "Check form" and "Reset form" at the top right of every page (on screen only, never printed).
     buttons = [("__check_form", "Check form", script("check-form"), 64), ("__reset_form", "Reset form", script("reset-form"), 64)]
     for i, (name, caption, code, button_w) in enumerate(buttons):

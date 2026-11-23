@@ -54,6 +54,11 @@ BAND = 13                   # height of a section's grey heading band
 SECTION_GAP = 5             # gap between sections
 INDENT = 14                 # follow-up questions are indented under the tick box that switches them on
 SIGN_OFF = 46               # height of the signature / date / company stamp lines
+BUTTON_W, BUTTON_H = 110, 18   # a button a section adds (buttons=[...] in the form file), and its row
+BUTTON_ROW = BUTTON_H + 6
+
+# The buttons a section may add (buttons=[...]): their caption. What each does is in acrobat_js.py, BUTTON_JS.
+BUTTONS = {"check-form": "Check form", "reset-form": "Reset form", "generate-qr": "Generate QR Code", "print-form": "Print Form"}
 
 # 13.2 is the only question placed by hand, to match the approved 4-page copy of the form:
 # its label sits beside a fixed-width box, this far after the label.
@@ -407,7 +412,7 @@ class Layout:
             return top - y + 12
 
         # A text box, a paragraph box (taller) or a date.
-        h = 50 + self.extra_height.get(q["id"], 0) if q["kind"] == "long" else BOX
+        h = (q.get("height") or 50) + self.extra_height.get(q["id"], 0) if q["kind"] == "long" else BOX
         if draw:
             if q["kind"] == "long":
                 self.paragraph_page[q["id"]] = self.page.number
@@ -607,7 +612,8 @@ class Layout:
     def section_height(self, section, area):
         note = self.note_lines(section, area)
         rows = sum(self.row_height(r, area) + 4 for r in self.rows_of(section, area["cols"]))
-        return BAND + 4 + len(note) * 9 + (4 if note else 0) + rows + (SIGN_OFF if section.get("signoff") else 0) + 1
+        return BAND + 4 + len(note) * 9 + (4 if note else 0) + rows + (BUTTON_ROW if section.get("buttons") else 0) + \
+            (SIGN_OFF if section.get("signoff") else 0) + 1
 
     # =========================================================================================== one section
     def draw_section(self, section, index, area, may_break, bottom=None):
@@ -655,6 +661,20 @@ class Layout:
             for q, x, w in self.cells(row, area):
                 self.place_question(q, x, w, True, beside)
             self.top -= h + 4
+
+        if section.get("buttons"):   # its buttons, in a row at the right (on screen only; step 2 adds what they do)
+            if may_break and self.top - BUTTON_ROW < BOTTOM:
+                self.top -= 1
+                outline()
+                self.new_page()
+                box_top = self.top
+                self.top -= 5
+            x = inner_x + inner_w - len(section["buttons"]) * (BUTTON_W + 6) + 6
+            for k, name in enumerate(section["buttons"]):
+                button = self.add_field(f"__s{index + 1}_{name.replace('-', '_')}", "button", size=8, script=name)
+                self.add_widget(button, x + k * (BUTTON_W + 6), self.top - 2 - BUTTON_H, BUTTON_W, BUTTON_H, caption=BUTTONS[name],
+                                border=ACCENT, bg=ACCENT, border_width=0, flags=0)
+            self.top -= BUTTON_ROW
 
         if section.get("signoff"):   # lines to sign on paper after printing
             for x, w, label in ((inner_x, 190, "Authorised signature(s)"), (inner_x + 210, 110, "Date")):

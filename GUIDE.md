@@ -93,6 +93,8 @@ text("applicant_name", "Applicant name", required=True, max=35),
 | Make a section the whole width / half | Add `width="full"` or `width="half"` to its `section(...)`. Two half sections in a row sit side by side. Without `width` the build decides |
 | Start a section on a new page | Add `new_page=True` to its `section(...)` |
 | Make a question take the whole row | Add `cols=12` (the row has 12 columns: `cols=6` = half, `cols=4` = a third). Without `cols` the build picks a width from the label and `max` |
+| Make a paragraph box taller or shorter | Add `height=80` to its `long(...)` line (points; the default is 50) |
+| Add buttons to a section | Add `buttons=["check-form", "print-form"]` to its `section(...)`. Choose from `"check-form"`, `"reset-form"`, `"generate-qr"`, `"print-form"`: they do what the form's own buttons of those names do, and show on screen only |
 | Change the choices of a question | Edit the list: `["Sight", "Term"]` |
 | Add a question | Copy a similar line, paste it where it should appear, give it a **new id**, change the label |
 | Remove a question | Delete its line. Also delete any `requiredIf=...("its_id")` or `DEFAULTS` entry that names its id. |
