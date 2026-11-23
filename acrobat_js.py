@@ -139,6 +139,9 @@ function lcDates(d) {
   for (i = 0; i < D.length; i++) { t = d.getField(D[i]); if (!t) continue; t.display = display.visible;
     p = d.getField(D[i] + "__list"); if (p) p.display = display.hidden; }
 }
+// When the warning before saving / printing was last closed. Some Acrobat versions (seen on Windows) fire the
+// save / print events several times in a row; the warning then shows once, not once per event.
+var lcWarnedAt = 0;
 // On opening in Acrobat: show the calendars, and set every box's colour and lock.
 if (typeof app != "undefined" && /^(Exchange|Reader)/.test(app.viewerType)) { lcDates(this); lcRules(this); }
 // THE QR CODE'S TEXT. lcPayload(doc) returns every answered question as JSON:
@@ -330,8 +333,10 @@ var m = lcRules(this), b = m.bad || [], t = [];
 var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
 if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
 if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
-if (t.length) { app.alert("This form is not ready to send. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them before you send the form.", 1);
-   }
+// Shown once: an event that fires again within 3 seconds of the warning closing is a repeat, not a new save / print.
+if (t.length && new Date().getTime() - lcWarnedAt > 3000) {
+  app.alert((event.name == "WillPrint" ? "Before printing: " : "Before saving: ") + "this form is not ready to send. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them before you send the form.", 1);
+  lcWarnedAt = new Date().getTime(); }
 
 }
 """[1:-1],

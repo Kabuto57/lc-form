@@ -469,7 +469,7 @@ When `lcRules` runs:
 | You click a tick box, option or date list | widget `/AA /U` |
 | Any value changes | hidden field `__checks`, with `/AA /C`; the only entry in `/AcroForm /CO` |
 | Check form, Generate QR Code, Print Form | button actions |
-| Before save or print | catalog `/AA /WS` and `/WP`: warns if the form is incomplete (but doesn't block) |
+| Before save or print | catalog `/AA /WS` and `/WP`: warns if the form is incomplete (but doesn't block). The warning starts "Before saving:" or "Before printing:", and shows once: an event within 3 seconds of the warning closing is a repeat (`lcWarnedAt`) |
 
 The buttons (`BUTTON_JS` in `acrobat_js.py`):
 
@@ -766,3 +766,9 @@ layout: box widths are worked out from the label and `max`.
     (points; default 50). `check_form` refuses other button names and a height on anything but a paragraph. No form
     file uses them yet, so every form builds byte-identical PDFs. PDF Template Studio's canvas sets both: drag a
     question's edge, or tick a section's buttons.
+30. **The warning before save / print shows once.** On the Windows work laptop, Acrobat showed "This form is not
+    ready to send" four times in a row when the form was opened. The `/WS` / `/WP` event was firing repeatedly (why
+    Acrobat fires it there is not yet known). `before-save` in `acrobat_js.py` now skips an event that comes within
+    3 seconds of the warning closing (`lcWarnedAt`, set in the document script), so a burst shows one warning and a
+    real save or print later still warns. The message now starts "Before saving:" or "Before printing:" (from
+    `event.name`), which says which event fired.
