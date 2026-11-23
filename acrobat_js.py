@@ -62,21 +62,59 @@ function wrong(id) {
 function day(s) { var x = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(s), k = x && new Date(+x[3], x[2] - 1, +x[1]); return k && k.getDate() == +x[1] && k.getMonth() == x[2] - 1 ? k : null; }
 function v(id) { return M[id] ? val(id) : ""; }
 
-// Checks across answers (the same as cross-checks in form/validate.ts). Skipped when a form doesn't have the fields.
+// THE RULES ACROSS ANSWERS. Each rule: what it checks (one sentence), then its code. A rule that is broken puts its
+// message on the question: the box turns red, and Check form lists "<question>: <message>".
+// Rules 1-6 are the LC's own (the same as the cross-checks in pdf-template-studio's form/validate.ts); a form without
+// those questions skips them. Rules 7-9 come from the form file (FORM["checks"]), so any form can add its own.
+function isNumber(s) { return /^[\d,]+(\.\d+)?$/.test(s); }   // "1,250.50" yes, "abc" no
+function toNumber(s) { return Number(s.replace(/,/g, "")); }   // "1,250.50" -> 1250.5
 function across() {
-  var X = {}, A = day(v("application_date")), S = day(v("latest_shipment_date")), E = day(v("expiry_date")), a = v("amount"), pb = v("price_basis");
-  if (S && E && E < S) X.expiry_date = "is before the latest shipment date";
-  else if (A && E && E < A) X.expiry_date = "is before the application date";
-  if (A && S && S < A) X.latest_shipment_date = "is before the application date";
-  if (A && A.getTime() > new Date().getTime()) X.application_date = "is in the future";
-  if (/^[\d,]+(\.\d+)?$/.test(a) && !(Number(a.replace(/,/g, "")) > 0)) X.amount = "must be more than zero";
-  if (v("insurance_arrangement") && (pb == "CIF" || pb == "CIP")) X.insurance_arrangement = "is only for FOB/CFR/FCA/CPT, but price basis is " + pb + " (the beneficiary insures)";
-  // The form's own checks (FORM["checks"] in the form file).
-  var C = __CHECKS__, c, p, q, n, want;
-  for (var j = 0; j < C.length; j++) { c = C[j];
-    if (c.t == "order") { p = day(v(c.a)); q = day(v(c.b)); if (p && q && (c.s ? p <= q : p < q)) X[c.a] = c.m; }
-    if (c.t == "range") { n = v(c.a); if (/^[\d,]+(\.\d+)?$/.test(n)) { n = Number(n.replace(/,/g, "")); if (n < c.lo || n > c.hi) X[c.a] = c.m; } }
-    if (c.t == "lengths") { n = v(c.a).replace(/\D/g, ""); want = c.by.hasOwnProperty(v(c.b)) ? c.by[v(c.b)] : c.by["*"]; if (n && want && want.length && !has(want, n.length)) X[c.a] = c.m; }
+  var X = {};                                     // what is wrong, by question id
+  var applied  = day(v("application_date"));      // the dates as real dates (null while blank or not a date)
+  var shipment = day(v("latest_shipment_date"));
+  var expiry   = day(v("expiry_date"));
+  var amount   = v("amount");
+  var basis    = v("price_basis");
+
+  // Rule 1: the LC must not expire before the latest shipment date.
+  if (shipment && expiry && expiry < shipment) X.expiry_date = "is before the latest shipment date";
+  // Rule 2: the LC must not expire before the application date (checked only when rule 1 is fine).
+  else if (applied && expiry && expiry < applied) X.expiry_date = "is before the application date";
+
+  // Rule 3: the latest shipment date must not be before the application date.
+  if (applied && shipment && shipment < applied) X.latest_shipment_date = "is before the application date";
+
+  // Rule 4: the application date must not be in the future.
+  if (applied && applied.getTime() > new Date().getTime()) X.application_date = "is in the future";
+
+  // Rule 5: the amount must be more than zero.
+  if (isNumber(amount) && !(toNumber(amount) > 0)) X.amount = "must be more than zero";
+
+  // Rule 6: "insurance for FOB/CFR/FCA/CPT" must be left blank when the price basis is CIF or CIP
+  //         (with CIF and CIP the beneficiary arranges the insurance).
+  if (v("insurance_arrangement") && (basis == "CIF" || basis == "CIP"))
+    X.insurance_arrangement = "is only for FOB/CFR/FCA/CPT, but price basis is " + basis + " (the beneficiary insures)";
+
+  // Rules 7-9: the form file's own checks. Each is {t: kind, a: question, m: message, ...}.
+  var C = __CHECKS__, c, first, second, digits, allowed;
+  for (var j = 0; j < C.length; j++) {
+    c = C[j];
+    // Rule 7 ("order"): date a must not be before date b (with s: true, it must be after b, not the same day).
+    if (c.t == "order") {
+      first = day(v(c.a)); second = day(v(c.b));
+      if (first && second && (c.s ? first <= second : first < second)) X[c.a] = c.m;
+    }
+    // Rule 8 ("range"): number a must be between lo and hi.
+    if (c.t == "range" && isNumber(v(c.a))) {
+      if (toNumber(v(c.a)) < c.lo || toNumber(v(c.a)) > c.hi) X[c.a] = c.m;
+    }
+    // Rule 9 ("lengths"): a's digits must be one of the allowed lengths, which can depend on answer b
+    //         (e.g. an account number's length by currency; "*" = any other answer).
+    if (c.t == "lengths") {
+      digits = v(c.a).replace(/\D/g, "");
+      allowed = c.by.hasOwnProperty(v(c.b)) ? c.by[v(c.b)] : c.by["*"];
+      if (digits && allowed && allowed.length && !has(allowed, digits.length)) X[c.a] = c.m;
+    }
   }
   return X;
 }
@@ -88,20 +126,33 @@ function clear(f, kind) {
   else if (f.value !== "" && f.value != null) f.value = "";
 }
 
-// Go through every question: work out its state, then colour (and lock) its boxes.
+// GO THROUGH EVERY QUESTION, in 5 steps, and colour (and lock) its boxes.
 var missing = [], bad = [], first = "", id, m, applies, required, problem, whatsWrong, names, i, f, X;
 try {
 X = across();
 for (id in M) {
-  m = M[id]; if (!m.hasRule && !m.check && !m.activeIf) continue;
+  m = M[id]; if (!m.hasRule && !m.check && !m.activeIf) continue;   // no rule, no format: nothing to do
+
+  // Step 1: does the question apply? (activeIf in the form file, e.g. "only when Term is picked")
   applies = !m.activeIf || any(m.activeIf);
+
+  // Step 2: is it mandatory now, and still blank? (required=True always, or requiredIf in the form file)
   required = m.hasRule && applies ? mandatory(id) : false;
   problem = required && (m.kind == "check" ? val(id) != "true" : empty(val(id)));
   if (problem) missing.push(m.label);
-  whatsWrong = applies ? wrong(id) || X[id] || "" : ""; if (whatsWrong) { bad.push(m.label + ": " + whatsWrong); problem = true; }
-  names = [id]; if (m.kind == "checks") { names = []; for (i = 0; i < m.options.length; i++) names.push(id + "__" + i); }
+
+  // Step 3: is the answer wrong? (its format, or one of the rules across answers above)
+  whatsWrong = applies ? wrong(id) || X[id] || "" : "";
+  if (whatsWrong) { bad.push(m.label + ": " + whatsWrong); problem = true; }
+
+  // Step 4: which boxes on the page are this question's (tick-any: one per option; a date: its list or its box)
+  names = [id];
+  if (m.kind == "checks") { names = []; for (i = 0; i < m.options.length; i++) names.push(id + "__" + i); }
   if (m.kind == "date" && !shown(id) && d.getField(id + "__list")) names = [id + "__list"];
   if (problem && !first) first = names[0];
+
+  // Step 5: colour each box. Doesn't apply: grey, locked, answer cleared. Problem: red outline, pink fill.
+  //         Fine: black outline (or just its underline), white fill.
   for (i = 0; i < names.length; i++) {
     f = d.getField(names[i]); if (!f) continue;
     if (m.hasRule && m.kind != "checks") f.required = !!(required && problem); // only while blank or wrong: Acrobat outlines Required boxes in red even when filled

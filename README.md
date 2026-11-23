@@ -120,7 +120,8 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | Make a new form | copy `forms/example_form.py` to `forms/<name>_form.py` (see [GUIDE.md](GUIDE.md)) |
 | Colours, text sizes, spacing, margins, answer formats | `layout.py`, section 1 |
 | How sections and questions are arranged | `layout.py`, section 4 |
-| How the form checks answers in Acrobat | `DOCUMENT_JS` in `acrobat_js.py` |
+| How the form checks answers in Acrobat | `DOCUMENT_JS` in `acrobat_js.py`: the LC's rules across answers are numbered Rule 1-9 in `across()` (one sentence each, then its code); the per-question loop is Steps 1-5 |
+| Add an LC rule across answers (e.g. a date order) | for any form: a check in the form file's `FORM["checks"]` (`not_before`, `after`, `in_range`, `account_length`); LC-only: a new numbered rule in `across()` |
 | What the QR code holds | `lcPayload` in `acrobat_js.py` |
 | What a button says or does | its entry in `BUTTON_JS` in `acrobat_js.py` |
 
@@ -772,3 +773,9 @@ layout: box widths are worked out from the label and `max`.
     3 seconds of the warning closing (`lcWarnedAt`, set in the document script), so a burst shows one warning and a
     real save or print later still warns. The message now starts "Before saving:" or "Before printing:" (from
     `event.name`), which says which event fired.
+31. **The rules, written as numbered rules.** In `acrobat_js.py`, `across()` now lists the checks across answers as
+    Rule 1-9: one plain sentence each (e.g. "Rule 1: the LC must not expire before the latest shipment date"), then
+    its code, with named dates (`applied`, `shipment`, `expiry`) instead of one-letter names. The loop that colours
+    each question is Steps 1-5 (applies? mandatory and blank? wrong? which boxes? colour). Behaviour unchanged:
+    old and new scripts compared on 15,000 random answer sets over 5 forms (LC, import financing, EBLC, OBC, BG;
+    every rule fired), 0 differences.
