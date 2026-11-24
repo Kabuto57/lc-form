@@ -18,7 +18,7 @@ lc-form/
   out/              <- the PDF appears here
   read_qr.py          reads the printed QR code(s) back (the Bank's side)
   tools/smartform/    how the trade forms were copied from the old smart form (not needed to build)
-  benchmark/          the QR code vs AI reading test (not needed to build)
+  benchmark/          the QR code vs AI reading test and poor-quality QR samples (not needed to build)
   GUIDE.md            this guide
   README.md           the full reference (rules, QR codes, security, history)
   requirements.txt    the library to install (pikepdf)

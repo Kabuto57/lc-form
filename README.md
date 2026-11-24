@@ -13,7 +13,7 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
   engine files that are the same for every form (`build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py`). One
   command builds the PDF and checks it.
 - **Folders:** the engine files at the top; every form file in `forms/`; `tools/smartform/` holds the tools that
-  copied the old smart form (not needed to build); `benchmark/` is the QR code vs AI reading test.
+  copied the old smart form (not needed to build); `benchmark/` is the QR code vs AI reading test (with scripts that make poor-quality samples).
 
 ## Run it
 
@@ -102,7 +102,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows. Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
 | `acrobat_js.py` | The JavaScript Acrobat runs inside the PDF: `DOCUMENT_JS` (rules engine, QR code text, QR encoder) and `BUTTON_JS` (one entry per button). Plain ASCII only. | To change how answers are checked or what a button does |
 | `read_qr.py` | **Reads the QR code(s)** from scanned images (or text from a handheld scanner), joins two codes, re-checks every answer against the form file, and saves the result as JSON in `out/`. Not needed to build. | The Bank's side |
-| `benchmark/` | **QR code vs AI test** (not needed to build): 10 fake filled-in LC scans (typed with QR, handwritten; clean / medium / poor), read by the QR code and by Gemini 3.7 Flash, scored per form and per field. Report: `benchmark/LC-QR-vs-AI.xlsx`; pictures in `benchmark/screenshots/`; how to re-run in `benchmark/README.md`. | To compare QR with AI |
+| `benchmark/` | **QR code vs AI test** (not needed to build): 10 fake filled-in LC scans (typed with QR, handwritten; clean / medium / poor), read by the QR code and by Gemini 3.7 Flash, scored per form and per field. Samples 21 to 30 (`benchmark/make_qr_samples.py`) are poor copies made to show how the QR code survives (phone photo, fax, blur, tears). Report: `benchmark/LC-QR-vs-AI.xlsx`; pictures in `benchmark/screenshots/`; how to re-run in `benchmark/README.md`. | To compare QR with AI |
 | `GUIDE.md` | Step-by-step guide for beginners, including copying the files to a work computer and fixing common problems. | Everyone, first |
 | `README.md` | This reference. | When you need the details |
 | `requirements.txt` | pikepdf and its three dependencies (to build), and zxing-cpp (to read QR codes), at exact versions. | Setup |
@@ -827,3 +827,10 @@ layout: box widths are worked out from the label and `max`.
     asks for one `calculateNow()`. Checked in Acrobat Pro (osascript, not mouse clicks): LC 1+4 pages -> Main menu 1
     page, `OPEN` empty, typed answer cleared -> LC 1+4 -> BG 1+3; saved copy reopens with `OPEN` = BG. NOT checked:
     real clicks after this round, Reader, whether clicking a radio button still updates the form without the widget action.
+36. **QR code quality samples 21 to 30 (`benchmark/make_qr_samples.py`).** 10 more typed LC applications, each a
+    different bad copy: phone photo, 75 dpi scan, blur, folds and punches, coffee stain and pen, torn corner, cropped
+    edge, damaged two-code fax, faded halftone, shrunk and skewed scan (3 have two QR codes). Measured with zxing-cpp
+    (as `read_qr.py`) and the workbench's reader: 7 of 10 read with every answer right; the torn corner (lost a corner
+    square) and the cropped edge fail, and the fax reads only 1 of its 2 codes. Output in `out/samples-qr-quality/`
+    (PDFs, QR close-ups, answer key, README table); a copy is in pdf-template-studio `public/samples/qr-quality/`.
+    The form files are unchanged.
