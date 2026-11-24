@@ -11,7 +11,7 @@ lc-form/
                          Build any of them the same way:  python build.py bg_form.py
   build.py          <- RUN THIS:  python build.py lc_form.py
   build_all.py      <- or this, for every form in one PDF with a main menu:  python build_all.py
-                       (tick the terms box, click a form on the menu and only that form is shown; Main menu hides it again; needs Acrobat with JavaScript on)
+                       (tick the terms box, click a form on the menu and that form's pages open after the menu; Main menu goes back to the menu; needs JavaScript on)
   layout.py         \
   pdf_writer.py      > the engine: the same for every form. Never edit these.
   acrobat_js.py     /
@@ -151,7 +151,7 @@ these codes; use `read_qr.py` or a QR reader that shows the text.
 | `PROBLEM IN acrobat_js.py ... characters that break Acrobat` | The file changed while being copied. Copy it again with Download raw file. |
 | `The library pikepdf is not installed` | Run the setup step again: `pip install -r requirements.txt`. |
 | In Acrobat: no calendars, red boxes never turn black, Check form says the checks did not start | JavaScript is off in Acrobat: yellow bar > Options > Enable JavaScript, or Preferences > JavaScript > Enable Acrobat JavaScript. Then close and reopen the PDF. |
-| In the one-PDF menu (`build_all.py`): a message says "This PDF viewer would not open the form" | The viewer would not show or hide pages. The message names the viewer: if it says Reader, open the PDF in Adobe Acrobat Pro or Standard. Send the message text to a developer. |
+| In the one-PDF menu (`build_all.py`): a message says "This PDF viewer would not open the form" | The viewer refused a step. The message names the step (e.g. `spawn` or `deletePages`), the error and the viewer; send the message text to a developer. Open the PDF in Adobe Acrobat Pro or Standard meanwhile. |
 | A browser shows the form but nothing is checked | Browsers don't run the form's checks. Download it and open it in Acrobat or Reader. |
 
 ## 6. When to ask a developer

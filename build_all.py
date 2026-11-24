@@ -8,12 +8,13 @@ Builds each form file (the same way as build.py), then joins them into one PDF:
   - each form, as built on its own (questions, rules, Check form / Reset form, QR code page), plus a
     "Main menu" button on every page.
   - bookmarks for every form.
-Like the old smart form, only one thing is shown at a time: the menu page is a visible named page ("MENU") and every
-form's pages are hidden page templates ("LC_0", "LC_1" ...). Clicking a form on the menu (or its bookmark) shows that
-form and hides the menu (showForm, in the document script "00 menu"); the "Main menu" button and bookmark hide the open
-form and show only the menu again (showMenu). The tick box (field "ACCEPT") is on the menu page. This needs Acrobat (not the free Reader, which may not show or hide
-pages) with JavaScript on; without JavaScript only the menu page is visible. If the viewer refuses, the menu shows a
-message with the error and the viewer's name (failed(), in "00 menu").
+The menu is the ordinary page 0 and always stays; every form's pages are hidden page templates ("LC_0", "LC_1" ...).
+Clicking a form on the menu (or its bookmark) copies that form's pages in after the menu with Template.spawn, and deletes
+the copies of the form that was open (showForm, in the document script "00 menu"; it asks first, because the open form's
+answers are cleared). The "Main menu" button and bookmark just go to page 0 (showMenu): the answers stay. The open form's
+code is kept in the hidden field "OPEN". The tick box (field "ACCEPT") is on the menu page. Needs JavaScript on (written
+for the free Acrobat Reader too, but untested there); without JavaScript only the menu page is visible. If the viewer
+refuses a step, the menu shows a message with the step, the error and the viewer's name (failed(), in "00 menu").
 Each form keeps its own rules and QR code: Check form, Reset form, Generate QR Code and Print Form work on that form
 only (its fields are renamed "LC.applicant_name", "BG.applicant_name" ..., and its scripts are made to match).
 Needs the form files below (in forms/) and the engine files in this folder. No terms and conditions pages: the old form has them
@@ -58,11 +59,12 @@ FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWor
 # ==================================================================================================================
 def scoped(js, code):
     """A form's JavaScript, rewritten for the joined PDF: its fields are "CODE.name", its functions "lcRules_CODE"
-    ..., and Reset form clears only this form. Only one form is shown at a time (the menu is hidden), so the form's
-    own page numbers (QR code page last, Print Form from page 0) still hold."""
+    ..., and Reset form clears only this form, and Print Form leaves out the menu (page 0). Only one form's pages follow
+    the menu, so the QR code page is still the last page."""
     js = js.replace("getField(", 'getField("%s." + ' % code)
     js = js.replace("n = d.getNthFieldName(i);", 'n = d.getNthFieldName(i); if (n.indexOf("%s.") != 0) continue; n = n.slice(%d);' % (code, len(code) + 1))
     js = re.sub(r"\b(%s)\b" % "|".join(FUNCTIONS), lambda m: m.group(1) + "_" + code, js)
+    js = js.replace("this.print(true, 0, this.numPages - 1, false, true)", "this.print(true, 1, this.numPages - 1, false, true)")
     js = js.replace("this.resetForm();", 'this.resetForm(["%s"]);' % code)
     return js
 
@@ -135,6 +137,14 @@ def to_menu():
     return Dictionary(S=Name.JavaScript, JS=String("showMenu(this);"))
 
 
+def open_field(out, page):
+    """The hidden read-only text field "OPEN": the code of the form whose pages are open (empty = none)."""
+    field = out.make_indirect(Dictionary(Type=Name.Annot, Subtype=Name.Widget, FT=Name.Tx, T=String("OPEN"), V=String(""),
+                                         Rect=[0, 0, 1, 1], F=2, Ff=1, P=page.obj, DA=String("/Helv 0 Tf 0 g")))
+    page.obj.Annots.append(field)
+    return field
+
+
 def tick_box(out, page, rect):
     """The terms tick box (field "ACCEPT"): black outline, white, a tick when on; off = /Off, on = /Yes."""
     w, h = rect[2] - rect[0], rect[3] - rect[1]
@@ -155,45 +165,50 @@ def tick_box(out, page, rect):
     return field
 
 
-# The document script "00 menu". The menu page is the named page "MENU" and each form's pages are page templates
-# CODE_0, CODE_1 ... Showing a template adds its page at the end; a PDF must keep at least one page, so the page(s) to
-# show are shown BEFORE the others are hidden. What is shown now is read from the document (which templates are not
-# hidden), not kept in a variable, so it is still right after the PDF is saved and opened again. If the viewer refuses
-# (Adobe says the free Acrobat Reader may not let a script show or hide pages), failed() says so and names the viewer, instead of
-# doing nothing.
+# The document script "00 menu". The menu is the ordinary page 0 and always stays. Each form's pages are hidden page
+# templates CODE_0, CODE_1 ... showForm copies them in with Template.spawn (bRename false: the fields keep their names,
+# "LC.applicant_name") after the menu page, and deletes the copies of the form that was open before. Which form is open
+# is kept in the hidden read-only field "OPEN" (the form's code, or empty), so it is still right after the PDF is saved
+# and opened again. showMenu only goes to page 0: nothing is deleted, so the answers stay until another form is chosen.
+# The free Acrobat Reader may refuse spawn or deletePages (not tested): failed() names the step, the error and the viewer.
 MENU_JS = """var FORMS = __FORMS__;
-function current(d) {
-  for (var code in FORMS) if (!d.getTemplate(code + "_0").hidden) return code;
-  return "MENU";
-}
-function hideForm(d, code) {
-  for (var k = 0; k < FORMS[code]; k++) d.getTemplate(code + "_" + k).hidden = true;
+var TITLES = __TITLES__;
+function openForm(d) {
+  var f = d.getField("OPEN");
+  return f ? String(f.value) : "";
 }
 function showForm(d, code) {
   if (d.getField("ACCEPT").value == "Off") {
     app.alert("Please tick the box to agree to the Bank's terms and conditions before opening a form.", 3);
     return;
   }
+  var step = "start";
   try {
-    var was = current(d);
-    if (code == was) return;
-    for (var k = 0; k < FORMS[code]; k++) d.getTemplate(code + "_" + k).hidden = false;
-    if (was == "MENU") d.getTemplate("MENU").hidden = true; else hideForm(d, was);
-    d.pageNum = 0;
-  } catch (e) { failed(e); }
+    var was = openForm(d);
+    if (was == code && d.numPages > 1) { d.pageNum = 1; return; }
+    step = "ask";
+    if (was != "" && d.numPages > 1 && app.alert("Open " + TITLES[code] + "? The answers in " + TITLES[was] + " will be cleared.", 2, 2) != 4) return;
+    step = "deletePages";
+    if (d.numPages > 1) d.deletePages({nStart: 1, nEnd: d.numPages - 1});
+    if (was != "") { step = "resetForm"; d.resetForm([was]); }
+    step = "OPEN";
+    d.getField("OPEN").value = "";
+    for (var k = 0; k < FORMS[code]; k++) {
+      step = "spawn " + code + "_" + k;
+      d.getTemplate(code + "_" + k).spawn({nPage: d.numPages, bRename: false, bOverlay: false});
+    }
+    step = "OPEN";
+    d.getField("OPEN").value = code;
+    step = "pageNum";
+    d.pageNum = 1;
+  } catch (e) { failed(e, step); }
 }
 function showMenu(d) {
-  try {
-    var was = current(d);
-    if (was == "MENU") return;
-    d.getTemplate("MENU").hidden = false;
-    hideForm(d, was);
-    d.pageNum = 0;
-  } catch (e) { failed(e); }
+  try { d.pageNum = 0; } catch (e) { failed(e, "pageNum"); }
 }
-function failed(e) {
-  app.alert("This PDF viewer would not open the form (" + e.name + ": " + e.message + "). Viewer: " + app.viewerType + " "
-    + app.viewerVersion + ". The free Acrobat Reader may not let a form show or hide pages: try Adobe Acrobat Pro or Standard.", 1);
+function failed(e, step) {
+  app.alert("This PDF viewer would not open the form (step " + step + ", " + e.name + ": " + e.message + "). Viewer: " + app.viewerType + " "
+    + app.viewerVersion + ". The free Acrobat Reader may not let a form add or delete pages: try Adobe Acrobat Pro or Standard.", 1);
 }
 """
 
@@ -238,7 +253,7 @@ def main():
             pages_of[code] = [out.pages[i].obj for i in range(first, last + 1)]
 
     # the menu page
-    ops = header("Trade Application Forms") + [text_op("Please select the form that you require. Only that form is shown; Main menu brings you back here.", M, H - 76, 9)]
+    ops = header("Trade Application Forms") + [text_op("Please select the form that you require. The form opens after this page; Main menu brings you back here.", M, H - 76, 9)]
     terms = wrap(TERMS_TEXT, 9, W - 2 * M - 24)
     for k, ln in enumerate(terms):
         ops.append(text_op(ln, M + 24, H - 98 - k * 11, 9))
@@ -257,7 +272,7 @@ def main():
             links.append(([M + 14, y - 4 - 11.5 * (len(lines) - 1), W - M, y + 11], code))
             y -= 17 + 11.5 * (len(lines) - 1)
         y -= 10
-    ops.append(text_op("Open this PDF in Adobe Acrobat with JavaScript on: the forms open, and are checked, only with JavaScript.", M, 50, 8, False, (0.35, 0.35, 0.35)))
+    ops.append(text_op("Open this PDF in Adobe Acrobat or Reader with JavaScript on: the forms open, and are checked, only with JavaScript.", M, 50, 8, False, (0.35, 0.35, 0.35)))
     menu_page.obj.Contents = out.make_stream(zlib.compress(" ".join(ops).encode("cp1252", "replace")), Filter=Name.FlateDecode)
     menu_page.obj.Resources = Dictionary(Font=Dictionary(
         F1=out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding)),
@@ -265,6 +280,7 @@ def main():
     for rect, code in links:
         link(menu_page, rect, show(code))
     accept = tick_box(out, menu_page, box_rect)
+    opened = open_field(out, menu_page)
     assert y > 70, "menu text runs into the footer"
 
     # every form's pages become hidden page templates: taken out of the page list, named in /Templates
@@ -272,7 +288,7 @@ def main():
     for name, page in sorted((f"{code}_{k}", page) for code, pages in pages_of.items() for k, page in enumerate(pages)):
         templates.append(String(name))   # a name tree: names in sorted order
         templates.append(page)
-    del out.pages[1:]   # the menu stays: it is the one visible page (and the named page "MENU")
+    del out.pages[1:]   # the menu stays: it is the one page at open
     for page in pages_of.values():
         for p in page:
             del p.Parent
@@ -283,15 +299,15 @@ def main():
         Helv=out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding)),
         ZaDb=out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.ZapfDingbats))))
     dr.Font.Helvetica = dr.Font.Helv
-    out.Root.AcroForm = out.make_indirect(Dictionary(Fields=Array(fields + [accept]), DR=dr, DA=String("/Helv 0 Tf 0 g"), CO=Array(recalcs)))
+    out.Root.AcroForm = out.make_indirect(Dictionary(Fields=Array(fields + [accept, opened]), DR=dr, DA=String("/Helv 0 Tf 0 g"), CO=Array(recalcs)))
     scripts.append(("00 menu", out.make_indirect(Dictionary(S=Name.JavaScript, JS=String(
-        MENU_JS.replace("__FORMS__", json.dumps({c: len(p) for c, p in pages_of.items()})))))))
+        MENU_JS.replace("__FORMS__", json.dumps({c: len(p) for c, p in pages_of.items()}))
+        .replace("__TITLES__", json.dumps({c: t for _, t, _, c in entries})))))))
     names = Array()
     for name, action in sorted(scripts):
         names.append(String(name))
         names.append(action)
-    out.Root.Names = Dictionary(JavaScript=Dictionary(Names=names), Templates=Dictionary(Names=templates),
-                                Pages=Dictionary(Names=Array([String("MENU"), menu_page.obj])))
+    out.Root.Names = Dictionary(JavaScript=Dictionary(Names=names), Templates=Dictionary(Names=templates))
     with out.open_outline() as o:
         o.root.append(pikepdf.OutlineItem("Main menu", action=to_menu()))
         for group, title, form_code, code in entries:
@@ -304,9 +320,13 @@ def main():
     problems = check.check_pdf_syntax()
     assert not problems, problems
     tops = [str(f.T) for f in check.Root.AcroForm.Fields]
-    assert len(tops) == len(set(tops)) == len(entries) + 1 and "ACCEPT" in tops, tops
+    assert len(tops) == len(set(tops)) == len(entries) + 2 and "ACCEPT" in tops and "OPEN" in tops, tops
     assert len(check.pages) == 1 and len(check.Root.Names.Templates.Names) == 2 * sum(map(len, pages_of.values()))
-    assert str(check.Root.Names.Pages.Names[0]) == "MENU" and check.Root.Names.Pages.Names[1].objgen == check.pages[0].obj.objgen
+    assert Name.Pages not in check.Root.Names
+    open_w = [a for a in check.pages[0].obj.Annots if str(a.get("/T")) == "OPEN"]
+    assert len(open_w) == 1 and open_w[0].F == 2 and open_w[0].Ff == 1, "OPEN field wrong"
+    js = next(str(x.JS) for n, x in zip(*[iter(check.Root.Names.JavaScript.Names)] * 2) if str(n) == "00 menu")
+    assert "__FORMS__" not in js and "__TITLES__" not in js and "spawn" in js
     assert any(str(a.get("/T")) == "ACCEPT" for a in check.pages[0].obj.Annots), "tick box missing"
     print(f"Wrote out/Trade-Application-Forms.pdf: menu page + {len(entries)} forms "
           f"({sum(map(len, pages_of.values()))} pages, hidden until chosen)")

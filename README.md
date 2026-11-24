@@ -94,7 +94,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | `forms/example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
 | `forms/eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
 | `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
-| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and only that form is shown, the menu hides (like the old smart form: every form's pages are hidden page templates, shown by the menu's script); the Main menu button on every page (and the bookmark) hides the form and shows only the menu again; bookmarks. Needs Acrobat with JavaScript on. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
+| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and that form's pages are copied in after the menu (every form's pages are hidden page templates, copied with `Template.spawn` by the menu's script; choosing another form asks first and clears the open form's answers); the Main menu button on every page (and the bookmark) goes to the menu page and keeps the answers; bookmarks. Needs JavaScript on. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
 | `tools/smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu (`out/Trade-Application-Forms-old-look.pdf`). | Developers |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
@@ -789,6 +789,21 @@ layout: box widths are worked out from the label and `max`.
     (13 links, ACCEPT = Off); ticked LC -> 4 pages; Main menu -> 1 page, 13 links, ACCEPT still Yes; BG -> 3 pages;
     back to LC keeps its answers. The alert text itself and clicking with the mouse were not checked.
 33. **The menu says why a form did not open.** `build_all.py`: if the PDF viewer refuses to show or hide pages (Adobe
+34. **Menu works without show/hide (for the free Reader).** Reported 24 Nov: in Acrobat Reader 26 the menu failed with
+    "NotAllowedError: Security Settings prevent access to this property or method" (setting `template.hidden` is not
+    allowed there). `build_all.py` no longer shows or hides anything: the menu is an ordinary page 0 that stays; a form's
+    pages stay hidden templates (`LC_0` ...) and `showForm` copies them in after the menu with `Template.spawn`
+    (`bRename: false`, so fields keep names like `LC.applicant_name` and the form's scripts, Check form, Reset form and
+    the QR code page, still the last page, work as before). Choosing the open form goes to its first page; choosing
+    another asks "Open <form>? The answers in <open form> will be cleared.", then deletes the old copies
+    (`deletePages`), clears that form (`resetForm`) and spawns the new one. Which form is open is the hidden field
+    `OPEN` (survives save and reopen). Main menu is just `pageNum = 0`: nothing is deleted, answers stay. Print Form
+    prints from page 1 (not the menu) again. The "visible named page MENU" of item 32 is gone. If a step is refused,
+    the message names it (`spawn`, `deletePages` ...). Checked in Acrobat Pro (this Mac, which cannot prove Reader): LC ->
+    1+4 pages, answer kept after Main menu, BG -> 1+3 pages with the question asked and LC answer cleared, BG QR field
+    on the last page, saved copy reopens with 5 pages and OPEN = LC. One difference found: copies made by spawn lose
+    the widget-level Mouse Up action (`lcRules(this)`) on the 19 radio / list widgets of LC page 1; the rules still run
+    through the hidden `__checks` calculation. NOT checked: Reader (it may still refuse `spawn` or `deletePages`).
     says the free Acrobat Reader may not allow it), the menu now shows a message with the error and the viewer's name
     and version, instead of doing nothing. Reported 24 Nov: on a work computer the tick-box message worked but a ticked
     form did not open.
