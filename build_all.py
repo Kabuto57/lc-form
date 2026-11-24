@@ -11,7 +11,8 @@ Builds each form file (the same way as build.py), then joins them into one PDF:
 The menu is the ordinary page 0 and always stays; every form's pages are hidden page templates ("LC_0", "LC_1" ...).
 Clicking a form on the menu (or its bookmark) copies that form's pages in after the menu with Template.spawn, and deletes
 the copies of the form that was open (showForm, in the document script "00 menu"; it asks first, because the open form's
-answers are cleared). The "Main menu" button and bookmark just go to page 0 (showMenu): the answers stay. The open form's
+answers are cleared). The "Main menu" button and bookmark (showMenu) ask the same, then delete the form's pages and clear its
+answers, so the PDF is just the menu page again (if the viewer refuses deletePages it only goes to page 0). The open form's
 code is kept in the hidden field "OPEN". The tick box (field "ACCEPT") is on the menu page. Needs JavaScript on (written
 for the free Acrobat Reader too, but untested there); without JavaScript only the menu page is visible. If the viewer
 refuses a step, the menu shows a message with the step, the error and the viewer's name (failed(), in "00 menu").
@@ -169,8 +170,12 @@ def tick_box(out, page, rect):
 # templates CODE_0, CODE_1 ... showForm copies them in with Template.spawn (bRename false: the fields keep their names,
 # "LC.applicant_name") after the menu page, and deletes the copies of the form that was open before. Which form is open
 # is kept in the hidden read-only field "OPEN" (the form's code, or empty), so it is still right after the PDF is saved
-# and opened again. showMenu only goes to page 0: nothing is deleted, so the answers stay until another form is chosen.
-# The free Acrobat Reader may refuse spawn or deletePages (not tested): failed() names the step, the error and the viewer.
+# and opened again. showMenu asks, then deletes the open form's pages and clears its answers, so the PDF is the menu page
+# again (if the viewer refuses deletePages it just goes to page 0 and the form stays). Spawn drops the click action of the
+# tick boxes, radio buttons and lists (setAction cannot put it back: measured; a field-level /V action and a direct call of
+# the rules both risk re-entry, "too much recursion"). The hidden __checks calculation, which spawn keeps, runs the rules
+# after every change, and showForm asks for one calculation (calculateNow) once the pages are in. Going to a page (goPage) never shows an error: if the viewer refuses it inside the click it is retried
+# 100 ms later, else the user just stays where they are. The free Acrobat Reader may refuse spawn or deletePages (not tested): failed() names the step.
 MENU_JS = """var FORMS = __FORMS__;
 var TITLES = __TITLES__;
 function openForm(d) {
@@ -178,37 +183,66 @@ function openForm(d) {
   return f ? String(f.value) : "";
 }
 function showForm(d, code) {
-  if (d.getField("ACCEPT").value == "Off") {
-    app.alert("Please tick the box to agree to the Bank's terms and conditions before opening a form.", 3);
-    return;
-  }
   var step = "start";
   try {
+    if (d.getField("ACCEPT").value == "Off") {
+      app.alert("Please tick the box to agree to the Bank's terms and conditions before opening a form.", 3);
+      return;
+    }
     var was = openForm(d);
-    if (was == code && d.numPages > 1) { d.pageNum = 1; return; }
+    if (was == code && d.numPages > 1) { goPage(d, 1); return; }
     step = "ask";
     if (was != "" && d.numPages > 1 && app.alert("Open " + TITLES[code] + "? The answers in " + TITLES[was] + " will be cleared.", 2, 2) != 4) return;
     step = "deletePages";
     if (d.numPages > 1) d.deletePages({nStart: 1, nEnd: d.numPages - 1});
-    if (was != "") { step = "resetForm"; d.resetForm([was]); }
     step = "OPEN";
-    d.getField("OPEN").value = "";
+    d.getField("OPEN").value = "";   // the pages are gone: the old form is not open any more, whatever happens next
+    if (was != "") {
+      try { d.resetForm([was]); } catch (e) { failed(e, "resetForm"); }
+    }
     for (var k = 0; k < FORMS[code]; k++) {
       step = "spawn " + code + "_" + k;
       d.getTemplate(code + "_" + k).spawn({nPage: d.numPages, bRename: false, bOverlay: false});
     }
     step = "OPEN";
     d.getField("OPEN").value = code;
-    step = "pageNum";
-    d.pageNum = 1;
+    // the copies lose their click action; the hidden __checks calculation still runs the rules, so ask for one calculation
+    // (never call the rules here: they set fields, which fires the calculation, which calls the rules again: too much recursion)
+    try { d.calculateNow(); } catch (e) {}
+    goPage(d, 1);
   } catch (e) { failed(e, step); }
 }
 function showMenu(d) {
-  try { d.pageNum = 0; } catch (e) { failed(e, "pageNum"); }
+  var step = "main menu";
+  try {
+    var was = openForm(d);
+    if (was != "" && d.numPages > 1) {
+      if (app.alert("Go back to the main menu? The answers in " + TITLES[was] + " will be cleared.", 2, 2) != 4) return;
+      try { d.deletePages({nStart: 1, nEnd: d.numPages - 1}); } catch (e) { goPage(d, 0); return; }   // viewer refuses: just go to the menu, the form stays
+      d.getField("OPEN").value = "";
+      try { d.resetForm([was]); } catch (e) { failed(e, "resetForm"); }
+    }
+    goPage(d, 0);
+  } catch (e) { failed(e, step); }
+}
+// Going to a page is the last step and never an error: a viewer may refuse it inside the click that just added or
+// deleted pages (InvalidSetError), so it is tried again a moment later; if that fails too, the user stays where they are.
+var GO = {d: null, n: 0};
+function goPage(d, n) {
+  try { d.pageNum = n; } catch (e) {
+    GO.d = d; GO.n = n;
+    try { app.setTimeOut("goLater()", 100); } catch (e2) {}
+  }
+}
+function goLater() {
+  try { GO.d.pageNum = GO.n; } catch (e) {}
 }
 function failed(e, step) {
-  app.alert("This PDF viewer would not open the form (step " + step + ", " + e.name + ": " + e.message + "). Viewer: " + app.viewerType + " "
-    + app.viewerVersion + ". The free Acrobat Reader may not let a form add or delete pages: try Adobe Acrobat Pro or Standard.", 1);
+  var viewer = app.viewerType + " " + app.viewerVersion;
+  var why = (step.indexOf("spawn") == 0 || step == "deletePages") && app.viewerType == "Reader"
+    ? "The free Acrobat Reader may not let a form add or delete pages: try Adobe Acrobat Pro or Standard."
+    : "This looks like a problem in the form's script: please send this message to the form's developer.";
+  app.alert("This PDF viewer would not open the form (step " + step + ", " + e.name + ": " + e.message + "). Viewer: " + viewer + ". " + why, 1);
 }
 """
 
@@ -248,12 +282,16 @@ def main():
                 if Name.F1 not in page.Resources.Font:
                     page.Resources.Font.F1 = out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding))
                 link(page, [x, H - 25, x + 64, H - 12], to_menu())
+                for a in page.obj.Annots:   # spawn drops GoTo links: make them JavaScript ("Next page" = pageNum += 1)
+                    if a.get(Name.Subtype) == Name.Link and a.get(Name.A, {}).get(Name.S) == Name.GoTo:
+                        gap = [p.objgen for p in out.pages[first:last + 1]].index(a.A.D[0].objgen) - (i - first)
+                        a.A = Dictionary(S=Name.JavaScript, JS=String("this.pageNum %s= %d;" % ("+" if gap > 0 else "-", abs(gap))))
             title = spec.FORM["title"]
             entries.append((group, title, re.search(r"[A-Z]+-\d+", spec.FORM["formCode"]).group(0), code))
             pages_of[code] = [out.pages[i].obj for i in range(first, last + 1)]
 
     # the menu page
-    ops = header("Trade Application Forms") + [text_op("Please select the form that you require. The form opens after this page; Main menu brings you back here.", M, H - 76, 9)]
+    ops = header("Trade Application Forms") + [text_op("Please select the form that you require. The form opens after this page; Main menu brings you back here and clears the form.", M, H - 76, 9)]
     terms = wrap(TERMS_TEXT, 9, W - 2 * M - 24)
     for k, ln in enumerate(terms):
         ops.append(text_op(ln, M + 24, H - 98 - k * 11, 9))

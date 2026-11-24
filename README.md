@@ -94,7 +94,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | `forms/example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
 | `forms/eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
 | `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
-| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and that form's pages are copied in after the menu (every form's pages are hidden page templates, copied with `Template.spawn` by the menu's script; choosing another form asks first and clears the open form's answers); the Main menu button on every page (and the bookmark) goes to the menu page and keeps the answers; bookmarks. Needs JavaScript on. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
+| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and that form's pages are copied in after the menu (every form's pages are hidden page templates, copied with `Template.spawn` by the menu's script; choosing another form asks first and clears the open form's answers); the Main menu button on every page (and the bookmark) asks, then deletes the open form's pages and clears its answers, so the PDF is just the menu page again (if the viewer refuses to delete pages it only goes to the menu page and the form stays); bookmarks. Needs JavaScript on. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
 | `tools/reader_test.py` | **Reader test** (`python tools/reader_test.py` -> `out/Reader-Test.pdf`): a one-page PDF with a "Run all tests" button that reports which page tricks the PDF viewer allows (hide a field, reset a field, switch a layer, spawn a template copy, delete it, show a hidden template, delete an original page). Used to choose how `build_all.py`'s menu can work in the free Acrobat Reader. | Developers |
 | `tools/smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu (`out/Trade-Application-Forms-old-look.pdf`). | Developers |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
@@ -790,6 +790,9 @@ layout: box widths are worked out from the label and `max`.
     (13 links, ACCEPT = Off); ticked LC -> 4 pages; Main menu -> 1 page, 13 links, ACCEPT still Yes; BG -> 3 pages;
     back to LC keeps its answers. The alert text itself and clicking with the mouse were not checked.
 33. **The menu says why a form did not open.** `build_all.py`: if the PDF viewer refuses to show or hide pages (Adobe
+    says the free Acrobat Reader may not allow it), the menu now shows a message with the error and the viewer's name
+    and version, instead of doing nothing. Reported 24 Nov: on a work computer the tick-box message worked but a ticked
+    form did not open.
 34. **Menu works without show/hide (for the free Reader).** Reported 24 Nov: in Acrobat Reader 26 the menu failed with
     "NotAllowedError: Security Settings prevent access to this property or method" (setting `template.hidden` is not
     allowed there). `build_all.py` no longer shows or hides anything: the menu is an ordinary page 0 that stays; a form's
@@ -805,6 +808,22 @@ layout: box widths are worked out from the label and `max`.
     on the last page, saved copy reopens with 5 pages and OPEN = LC. One difference found: copies made by spawn lose
     the widget-level Mouse Up action (`lcRules(this)`) on the 19 radio / list widgets of LC page 1; the rules still run
     through the hidden `__checks` calculation. NOT checked: Reader (it may still refuse `spawn` or `deletePages`).
-    says the free Acrobat Reader may not allow it), the menu now shows a message with the error and the viewer's name
-    and version, instead of doing nothing. Reported 24 Nov: on a work computer the tick-box message worked but a ticked
-    form did not open.
+35. **Main menu clears the form; fixes after the first Reader-era round.** (a) Main menu (button and bookmark) asks
+    "Go back to the main menu? The answers in <form> will be cleared."; Yes deletes the form's pages, clears `OPEN`,
+    clears the form (`resetForm`, its own `try`) and shows the menu page alone; No stays. If `deletePages` is refused
+    (free Reader may), it just goes to page 0 and the form stays, with no message. The menu's intro text says so.
+    (b) Spawned copies lost the GoTo "< Previous page" / "Next page >" links: `build_all.py` now makes them JavaScript
+    links (`this.pageNum += 1` / `-= 1`), which survive (Acrobat-saved copy: 2 + 2 + 3 Main menu links on BG's 3 pages).
+    (c) `showForm`: the ACCEPT read is inside the `try`; `OPEN` is cleared right after `deletePages`, and `resetForm`
+    has its own `try`, so a failed reset cannot leave `OPEN` naming a form whose pages are gone. (d) Going to a page
+    (`goPage`) never raises an error: a real click refused `d.pageNum = 1` right after `spawn` ("InvalidSetError"),
+    so it is retried 100 ms later with `app.setTimeOut`, else the user stays put. (e) The error message blames the free
+    Reader only for `spawn` / `deletePages` in Reader; otherwise it says it is a script problem to send to the developer.
+    (f) NOT restored: the widget-level click action (`lcRules(this)`) that `spawn` drops from tick boxes, radio buttons
+    and lists. `Field.setAction` has no effect on the spawned copies (Acrobat-saved copy: 0 such actions, same as
+    before); calling the rules right after `spawn` fails in a real click ("too much recursion": the rules set fields,
+    which fires the `__checks` calculation, which calls the rules); a field-level `/V` action was tried and dropped for
+    the same re-entry risk. The `__checks` calculation survives spawn and runs the rules after changes; `showForm` only
+    asks for one `calculateNow()`. Checked in Acrobat Pro (osascript, not mouse clicks): LC 1+4 pages -> Main menu 1
+    page, `OPEN` empty, typed answer cleared -> LC 1+4 -> BG 1+3; saved copy reopens with `OPEN` = BG. NOT checked:
+    real clicks after this round, Reader, whether clicking a radio button still updates the form without the widget action.
