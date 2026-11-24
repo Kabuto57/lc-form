@@ -156,9 +156,13 @@ def tick_box(out, page, rect):
 
 # The document script "00 menu". The menu page is the named page "MENU" and each form's pages are page templates
 # CODE_0, CODE_1 ... Showing a template adds its page at the end; a PDF must keep at least one page, so the page(s) to
-# show are shown BEFORE the others are hidden. "current" is what is shown now (it starts as the menu, as the PDF opens).
+# show are shown BEFORE the others are hidden. What is shown now is read from the document (which templates are not
+# hidden), not kept in a variable, so it is still right after the PDF is saved and opened again.
 MENU_JS = """var FORMS = __FORMS__;
-var current = "MENU";
+function current(d) {
+  for (var code in FORMS) if (!d.getTemplate(code + "_0").hidden) return code;
+  return "MENU";
+}
 function hideForm(d, code) {
   for (var k = 0; k < FORMS[code]; k++) d.getTemplate(code + "_" + k).hidden = true;
 }
@@ -167,17 +171,17 @@ function showForm(d, code) {
     app.alert("Please tick the box to agree to the Bank's terms and conditions before opening a form.", 3);
     return;
   }
-  if (code == current) return;
+  var was = current(d);
+  if (code == was) return;
   for (var k = 0; k < FORMS[code]; k++) d.getTemplate(code + "_" + k).hidden = false;
-  if (current == "MENU") d.getTemplate("MENU").hidden = true; else hideForm(d, current);
-  current = code;
+  if (was == "MENU") d.getTemplate("MENU").hidden = true; else hideForm(d, was);
   d.pageNum = 0;
 }
 function showMenu(d) {
-  if (current == "MENU") return;
+  var was = current(d);
+  if (was == "MENU") return;
   d.getTemplate("MENU").hidden = false;
-  hideForm(d, current);
-  current = "MENU";
+  hideForm(d, was);
   d.pageNum = 0;
 }
 """
