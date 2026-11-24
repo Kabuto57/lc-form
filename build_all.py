@@ -52,7 +52,7 @@ MENU = [
 # The wording beside the tick box on the menu page (change it here).
 TERMS_TEXT = "I have read and agree to the Bank's terms and conditions for trade applications."
 W, H, M = PAGE_WIDTH, PAGE_HEIGHT, MARGIN
-FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWords")
+FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWords", "lcModel", "lcDeps", "lcState")   # functions and the rules engine's variables
 
 
 # ==================================================================================================================
@@ -67,6 +67,8 @@ def scoped(js, code):
     js = re.sub(r"\b(%s)\b" % "|".join(FUNCTIONS), lambda m: m.group(1) + "_" + code, js)
     js = js.replace("this.print(true, 0, this.numPages - 1, false, true)", "this.print(true, 1, this.numPages - 1, false, true)")
     js = js.replace("this.resetForm();", 'this.resetForm(["%s"]);' % code)
+    # the hidden __checks calculation (one per form, 13 in all) does nothing unless this form is the open one
+    js = js.replace("/*calc*/", 'if (String(this.getField("OPEN").value) == "%s") ' % code)
     return js
 
 
@@ -173,7 +175,7 @@ def tick_box(out, page, rect):
 # and opened again. showMenu asks, then deletes the open form's pages and clears its answers, so the PDF is the menu page
 # again (if the viewer refuses deletePages it just goes to page 0 and the form stays). Spawn drops the click action of the
 # tick boxes, radio buttons and lists (setAction cannot put it back: measured; a field-level /V action and a direct call of
-# the rules both risk re-entry, "too much recursion"). The hidden __checks calculation, which spawn keeps, runs the rules
+# the rules both risk re-entry, "too much recursion"). The hidden __checks calculation, which spawn keeps (it only runs while OPEN is its form), runs the rules
 # after every change, and showForm asks for one calculation (calculateNow) once the pages are in. Going to a page (goPage) never shows an error: if the viewer refuses it inside the click it is retried
 # 100 ms later, else the user just stays where they are. The free Acrobat Reader may refuse spawn or deletePages (not tested): failed() names the step.
 MENU_JS = """var FORMS = __FORMS__;

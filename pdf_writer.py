@@ -35,7 +35,10 @@ from layout import (ACCENT, FORMATS, INK, MARGIN, PAGE_HEIGHT, PAGE_WIDTH, RULE,
 #      Generate QR Code and Print Form on the QR page)
 # It only adds field descriptions to the layout; step 3 makes the PDF objects.
 
-RUN_RULES = "lcRules(this);"   # the call every event uses
+# The calls the events use. Both pass the name of the box that changed, so lcRules re-checks only the questions that read it.
+# "/*calc*/" is a marker: build_all.py turns it into "only while this form is the open one" (the joined PDF has 13 of these).
+RULES_ON_EVENT = "lcRules(this, event.target.name);"                                    # a click or a blur
+RULES_ON_CALC = "/*calc*/lcRules(this, event.source ? event.source.name : null);"       # any value changed (no source = check all)
 
 # Acrobat stops reading the whole form script at the first character it doesn't expect. Copying files between
 # machines sometimes adds one you can't see (a "byte order mark") or turns ' and " into curly quotes, and then the
@@ -106,13 +109,50 @@ def rules_table(layout):
     return {q["id"]: table[q["id"]] for q in layout_questions if q["id"] in table}
 
 
+# What the checks across answers (rules 1-9 in DOCUMENT_JS, function across) read: question -> the questions it reads.
+# Keep in step with across(): rules 1-6 are the LC's own, rules 7-9 come from FORM["checks"] (handled in dependency_index).
+ACROSS_READS = {"expiry_date": ["latest_shipment_date", "application_date"], "latest_shipment_date": ["application_date"],
+                "insurance_arrangement": ["price_basis"]}
+
+
+def dependency_index(table, checks):
+    """For each box: the questions to re-check when it changes (itself, everything that reads it, and everything that
+    reads those: a question that stops applying clears its box, which others may read). None when a check kind of the form
+    file is unknown to this index (then the rules engine checks everything every time)."""
+    reads = {q: {q} for q in table}
+    for q, item in table.items():
+        for rule in (item.get("requiredIf") or []) + (item.get("activeIf") or []):
+            reads[q].add(rule[0])
+        reads[q].update(item.get("words") or [])
+        reads[q].update(ACROSS_READS.get(q, []))
+    for c in checks:
+        if c["t"] not in ("order", "range", "lengths"):
+            return None
+        if c["a"] in reads:
+            reads[c["a"]].update([c["a"], c.get("b", c["a"])] if c["t"] != "range" else [c["a"]])
+    affects = {}
+    for q, sources in reads.items():
+        for x in sources:
+            affects.setdefault(x, set()).add(q)
+    index = {}
+    for x in affects:
+        todo, seen = [x], set()
+        while todo:
+            for q in affects.get(todo.pop(), ()):
+                if q not in seen:
+                    seen.add(q)
+                    todo.append(q)
+        index[x] = [q for q in table if q in seen]
+    return index
+
+
 def document_script(layout, table):
     """The one document-level script (DOCUMENT_JS), filled in for this form."""
     form, questions = layout.form, layout.questions
     tick_any = ", ".join(f"{json.dumps(q['id'])}: {js_json(q.get('options') or [])}" for q in questions if q["kind"] == "checks")
     code = re.search(r"[A-Z]+-\d+", form.get("formCode") or "")     # "LC-01"
     version = re.search(r"v([\d.]+)", form.get("formCode") or "")   # "1.0"
-    return script("document", MODEL=js_json(table), DATES=js_json([q["id"] for q in questions if q["kind"] == "date"]),
+    return script("document", MODEL=js_json(table), DEPS=js_json(dependency_index(table, form.get("checks") or [])), DATES=js_json([q["id"] for q in questions if q["kind"] == "date"]),
                   GROUPS=tick_any, LONG=js_json([q["id"] for q in questions if q["kind"] == "long"]),
                   FORM=json.dumps(code.group(0) if code else safe(form["title"]), ensure_ascii=False),
                   VERSION=json.dumps(version.group(1) if version else "1"),
@@ -136,11 +176,11 @@ def add_scripts(layout):
         for name in names:
             for widget in layout.by_name.get(name, {"widgets": []})["widgets"]:
                 clicked = item["kind"] in ("check", "checks", "radio") or (item["kind"] == "date" and name != qid)
-                widget.setdefault("events", {})["U" if clicked else "Bl"] = RUN_RULES
+                widget.setdefault("events", {})["U" if clicked else "Bl"] = RULES_ON_EVENT
 
     # ... and after any value changes (Acrobat's "calculate" event), as a safety net: a hidden field off the page.
     layout.page = layout.pages[0]
-    recalc = layout.add_field("__checks", "text", size=3, events={"C": RUN_RULES})
+    recalc = layout.add_field("__checks", "text", size=3, events={"C": RULES_ON_CALC})
     layout.add_widget(recalc, -20, -20, 1, 1, hidden=True, border=INK, bg=WHITE)
 
     # The QR codes: a hidden field "__qr" holds the answers as JSON; DOCUMENT_JS draws each code into 177 read-only
@@ -510,7 +550,8 @@ def self_check(pdf_bytes, spec):
     doc_script = zlib.decompress(pdf.Root.Names.JavaScript.Names[1].JS.read_raw_bytes()).decode("latin-1")
     for name in ("function lcRules(", "function lcDates(", "function lcPayload(", "function lcQrMatrix(", "function lcDrawQr("):
         assert name in doc_script, f"script lacks {name}"
-    table = json.loads(re.search(r"var M = (\{.*?\});\n", doc_script).group(1))
+    table = json.loads(re.search(r"var lcModel = (\{.*?\});\n", doc_script).group(1))
+    assert "__DEPS__" not in doc_script, "the index of dependencies was not filled in"
     for q in questions:   # every rule in the form file reached the rules table unchanged
         if q.get("required") or q.get("requiredIf") or q.get("activeIf"):
             assert q["id"] in table, f"{q['id']} not in the rules table"

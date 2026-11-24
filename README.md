@@ -96,6 +96,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
 | `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and that form's pages are copied in after the menu (every form's pages are hidden page templates, copied with `Template.spawn` by the menu's script; choosing another form asks first and clears the open form's answers); the Main menu button on every page (and the bookmark) asks, then deletes the open form's pages and clears its answers, so the PDF is just the menu page again (if the viewer refuses to delete pages it only goes to the menu page and the form stays); bookmarks. Needs JavaScript on. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
 | `tools/reader_test.py` | **Reader test** (`python tools/reader_test.py` -> `out/Reader-Test.pdf`): a one-page PDF with a "Run all tests" button that reports which page tricks the PDF viewer allows (hide a field, reset a field, switch a layer, spawn a template copy, delete it, show a hidden template, delete an original page). Used to choose how `build_all.py`'s menu can work in the free Acrobat Reader. | Developers |
+| `tools/lag_check.py` | **Lag check** (`python tools/lag_check.py out/LC-Application.pdf out/Trade-Application-Forms.pdf`; Mac, Adobe Acrobat Pro): opens the PDF in Acrobat and reports the ms of a simulated field commit (the calculation plus the blur script) on three fields. Run it on a PDF built before a change and one built after. | Developers |
 | `tools/smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu (`out/Trade-Application-Forms-old-look.pdf`). | Developers |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
@@ -454,10 +455,18 @@ applies then, but stays optional.
 Everything is stored in one document-level script, named `lcRules`, built from `DOCUMENT_JS` in `acrobat_js.py`. It defines these
 functions:
 
-- `lcRules(doc)`: the rules engine. It holds a table `M` of every question that has a rule, a format or
-  a lock. On each run it works out, for every question, whether it applies, whether it's mandatory now, and whether
+- `lcRules(doc, name)`: the rules engine. It holds a table (`lcModel`) of every question that has a rule, a format or
+  a lock. On a full run (no `name`) it works out, for every question, whether it applies, whether it's mandatory now, and whether
   its answer is blank or wrong. It then sets the box's outline, fill, required flag and lock. It returns the list of
   missing questions, plus `.bad` (wrong answers) and `.first` (the first problem, for the cursor).
+  **Speed:** with a `name` (the box that just changed: its blur, its click, or the calculation's `event.source`) it re-checks only
+  the questions that read that box, using the index `lcDeps` that `dependency_index()` in `pdf_writer.py` builds when the PDF is
+  made (a box -> itself, the questions that read it through `requiredIf` / `activeIf` / `words` / the checks across answers
+  (`ACROSS_READS` there must match `across()` in `acrobat_js.py`), and what those read in turn). If the form file has a check kind
+  the index doesn't know, `lcDeps` is `null` and every run is a full run. It does nothing if the box still holds the value
+  the last run saw (so a change that fires both the calculation and the blur is checked once, not twice), skips writing a box
+  whose look (required / lock / red or black or grey) is unchanged (every Acrobat property write is slow), and turns
+  `doc.calculate` off while it writes. Check form, saving, the QR code and Reset form always do a full run (same messages as before).
 - `lcDates(doc)`: in Acrobat, shows each date's calendar box and hides its drop-down list.
 - `lcPayload(doc)`: builds the QR code text.
 - `lcQrMatrix(text)` and `lcDrawQr(doc, text)`: the QR code (see below).
@@ -469,7 +478,7 @@ When `lcRules` runs:
 | Form opens in Acrobat or Reader | end of the document script |
 | You leave a text box, list or date | widget `/AA /Bl` |
 | You click a tick box, option or date list | widget `/AA /U` |
-| Any value changes | hidden field `__checks`, with `/AA /C`; the only entry in `/AcroForm /CO` |
+| Any value changes | hidden field `__checks`, with `/AA /C`; the only entry in `/AcroForm /CO`. It passes `event.source` (the box that changed) to `lcRules`; no source = full run. In the one-PDF build each of the 13 forms has its own `__checks`, which returns at once unless the hidden field `OPEN` names its form |
 | Check form, Generate QR Code, Print Form | button actions |
 | Before save or print | catalog `/AA /WS` and `/WP`: warns if the form is incomplete (but doesn't block). The warning starts "Before saving:" or "Before printing:", and shows once: an event within 3 seconds of the warning closing is a repeat (`lcWarnedAt`) |
 
@@ -834,3 +843,19 @@ layout: box widths are worked out from the label and `max`.
     square) and the cropped edge fail, and the fax reads only 1 of its 2 codes. Output in `out/samples-qr-quality/`
     (PDFs, QR close-ups, answer key, README table); a copy is in pdf-template-studio `public/samples/qr-quality/`.
     The form files are unchanged.
+37. **No wait when leaving a box (rules once per change, only what the change affects).** Reported 24 Nov: a pause each time a
+    person leaves a box and clicks the next. Measured in Acrobat Pro (Mac, `tools/lag_check.py`): standalone LC 163-174 ms per
+    simulated commit (the calculation about 85 ms, the blur script another 80 ms: the rules ran twice, each run writing every
+    question's colour); the joined PDF has 13 `__checks` calculations, one per form, so every commit ran the rules of forms that
+    are not open. Changes (`acrobat_js.py`, `pdf_writer.py`, `build_all.py`; behaviour, messages, required / lock logic and the
+    QR text are unchanged): (a) `lcRules(doc, name)` re-checks only the questions in `lcDeps[name]`, an index
+    `dependency_index()` builds when the PDF is made (a box, the questions reading it, and what those read); (b) it ignores a
+    box whose value is the one it saw last (the calculation fires first, then the blur: one run, not two); (c) it skips writing a
+    box whose look is unchanged and sets `doc.calculate = false` while writing, with a second pass only if a box was cleared;
+    (d) a full run (opening, Reset form, Check form, saving, QR code, a calculation with no `event.source`) still checks everything
+    and rewrites every look; (e) joined PDF: each form's `__checks` returns at once unless `OPEN` is its form. After: standalone LC
+    2-9 ms per commit, joined PDF with LC open 2-4 ms. NOT measured: the joined PDF before the change (its document scripts did not
+    finish loading in Acrobat within 240 s in this session, JavaScript was switched off for it), Reader, a person's clicks.
+    Checked in Acrobat Pro: 18 edits to LC (amount, dates, drafts chain, insurance chain with a cascade clear, price basis)
+    gave the same boxes (required, lock, colours, line width, value) after the incremental run as after a full run; in the joined
+    PDF, reset + `calculateNow` followed by typing the same answer again still colours the box.

@@ -8,7 +8,10 @@ THE FILES THAT BUILD A FORM (the engine files together in one folder, the form f
     build.py        THIS FILE. Run it. Its first section lists every kind of question and every option.
     layout.py       Step 1: where everything goes on the page (and the colours, sizes and answer formats).
     pdf_writer.py   Steps 2 and 3: adds the checks and buttons, writes the PDF, then checks the PDF.
-    acrobat_js.py   The JavaScript Acrobat runs inside the PDF (red boxes, Check form, QR codes).
+    acrobat_js.py   The JavaScript Acrobat runs inside the PDF (red boxes, Check form, QR codes). To stay quick it
+                    re-checks only the questions that read the box you just left (an index pdf_writer.py builds from the
+                    form file), once per change, and skips writing boxes whose look is unchanged.
+                    (python tools/lag_check.py times a field commit in Acrobat.)
 You only ever edit form files. The other four are the same for every form.
 
 WHAT A BUILD DOES

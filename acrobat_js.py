@@ -18,8 +18,27 @@ DOCUMENT_JS = r"""
 // lcDates(doc) shows each date's calendar box and hides its drop-down list (Acrobat only).
 // __MODEL__ is filled in by document_script (step 2) with the rules table built from the form; __DATES__ with the date
 // question ids. Acrobat's JavaScript is old-style: var, no arrow functions.
-function lcRules(d) {
-var M = __MODEL__;
+// The rules table, the index "box -> the questions to re-check when it changes" (null = always check everything), and what
+// the last run saw: v = each box's last-seen value, st = each box's last-written look (so unchanged boxes are not written again).
+var lcModel = __MODEL__;
+var lcDeps = __DEPS__;
+var lcState = {v: {}, st: {}};
+function lcRules(d, src) {
+var M = lcModel, S = lcState, only = null, calc, pass, cleared = false, nm, g, sig;
+// src = the name of the box that just changed (its blur, its click, or what the calculation says triggered it). Then only the
+// questions that read that box are re-checked (lcDeps), and nothing at all if its value is what the last run saw.
+// No src (opening, Reset form, Check form, saving ...): every question, and every look is written again.
+if (src) {
+  nm = String(src).replace(/^[A-Z]+\./, ""); g = /^(.+)__(\d+|list)$/.exec(nm);
+  g = M[nm] ? nm : g && M[g[1]] ? g[1] : "";
+  if (lcDeps) {
+    g = g && lcDeps[g];
+    sig = d.getField(nm); sig = sig ? String(sig.value) : "";
+    if (!g || S.v[nm] === sig) { g = []; g.bad = []; g.first = ""; return g; }
+    S.v[nm] = sig; only = {}; for (sig = 0; sig < g.length; sig++) only[g[sig]] = 1;
+  }
+}
+if (!only) { S.v = {}; S.st = {}; }
 function has(list, x) { for (var i = 0; i < list.length; i++) if (list[i] == x) return true; return false; }
 
 // The answer to question id, read from the PDF's fields.
@@ -120,18 +139,23 @@ function across() {
 }
 
 // Clears a question's box, so an answer can't stay behind in a question that doesn't apply.
-function clear(f, kind) {
-  if (kind == "check" || kind == "checks" || kind == "radio") { if (f.value != "Off") f.value = "Off"; }
-  else if (f.type == "combobox" && /__list$/.test(f["name"])) { if (f.currentValueIndices != 0) f.currentValueIndices = 0; } // a date list: back to "Pick a date"
-  else if (f.value !== "" && f.value != null) f.value = "";
+function clear(f, kind, nm) {
+  if (kind == "check" || kind == "checks" || kind == "radio") { if (f.value != "Off") { f.value = "Off"; cleared = true; } }
+  else if (f.type == "combobox" && /__list$/.test(f["name"])) { if (f.currentValueIndices != 0) { f.currentValueIndices = 0; cleared = true; } } // a date list: back to "Pick a date"
+  else if (f.value !== "" && f.value != null) { f.value = ""; cleared = true; }
+  delete S.v[nm];   // the next change of this box is new to the next run
 }
 
 // GO THROUGH EVERY QUESTION, in 5 steps, and colour (and lock) its boxes.
 var missing = [], bad = [], first = "", id, m, applies, required, problem, whatsWrong, names, i, f, X;
+calc = d.calculate; d.calculate = false;   // every write below would otherwise run the calculation again
 try {
+for (pass = 0; pass < 3; pass++) {   // a second pass only if a box was cleared (a later question may read it)
+missing = []; bad = []; first = ""; cleared = false;
 X = across();
 for (id in M) {
   m = M[id]; if (!m.hasRule && !m.check && !m.activeIf) continue;   // no rule, no format: nothing to do
+  if (only && !only[id]) continue;                                    // this change can't affect it
 
   // Step 1: does the question apply? (activeIf in the form file, e.g. "only when Term is picked")
   applies = !m.activeIf || any(m.activeIf);
@@ -153,19 +177,25 @@ for (id in M) {
 
   // Step 5: colour each box. Doesn't apply: grey, locked, answer cleared. Problem: red outline, pink fill.
   //         Fine: black outline (or just its underline), white fill.
+  sig = (required && problem ? "r" : "-") + (applies ? (problem ? "p" : "o") : "g");   // required flag, then the look
   for (i = 0; i < names.length; i++) {
     f = d.getField(names[i]); if (!f) continue;
+    if (S.st[names[i]] === sig) continue;   // already looks like this: every write to Acrobat is slow
+    S.st[names[i]] = sig;
     if (m.hasRule && m.kind != "checks") f.required = !!(required && problem); // only while blank or wrong: Acrobat outlines Required boxes in red even when filled
     if (m.activeIf) f.readonly = !applies;                                                   // locked until it applies
-    if (!applies) { clear(f, m.kind); f.lineWidth = 1; f.strokeColor = ["G", 0.6]; f.fillColor = ["G", 0.86]; continue; } // grey, cleared
+    if (!applies) { clear(f, m.kind, names[i]); f.lineWidth = 1; f.strokeColor = ["G", 0.6]; f.fillColor = ["G", 0.86]; continue; } // grey, cleared
     f.lineWidth = problem || !m.underlined ? 1 : 0;
     f.strokeColor = problem ? color.red : m.underlined ? color.transparent : color.black;    // red when blank or wrong
     f.fillColor = problem ? ["RGB", 1, 0.88, 0.88] : m.underlined ? color.transparent : color.white;
   }
 }
 // Amounts in words (a question with words: [amount id, currency id]), as the old bill of exchange wrote them.
-for (id in M) if (M[id].words && (f = d.getField(id))) { i = lcWords(v(M[id].words[0]), v(M[id].words[1] || "")); if (f.value != i) f.value = i; }
+for (id in M) if (M[id].words && (!only || only[id]) && (f = d.getField(id))) { i = lcWords(v(M[id].words[0]), v(M[id].words[1] || "")); if (f.value != i) { f.value = i; delete S.v[id]; } }
+if (!cleared) break;
+}
 } catch (e) { console.println("lcRules: " + e); }
+d.calculate = calc;
 missing.bad = bad;
 missing.first = first; // the field of the first problem, for "Check form" to go to
 return missing;

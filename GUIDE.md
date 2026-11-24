@@ -17,6 +17,7 @@ lc-form/
   acrobat_js.py     /
   out/              <- the PDF appears here
   read_qr.py          reads the printed QR code(s) back (the Bank's side)
+  tools/lag_check.py  times a field commit in Acrobat (Mac): run it on a PDF built before and after a change
   tools/smartform/    how the trade forms were copied from the old smart form (not needed to build)
   benchmark/          the QR code vs AI reading test and poor-quality QR samples (not needed to build)
   GUIDE.md            this guide
@@ -152,6 +153,7 @@ these codes; use `read_qr.py` or a QR reader that shows the text.
 | `The library pikepdf is not installed` | Run the setup step again: `pip install -r requirements.txt`. |
 | In Acrobat: no calendars, red boxes never turn black, Check form says the checks did not start | JavaScript is off in Acrobat: yellow bar > Options > Enable JavaScript, or Preferences > JavaScript > Enable Acrobat JavaScript. Then close and reopen the PDF. |
 | In the one-PDF menu (`build_all.py`): a message says "This PDF viewer would not open the form" | The viewer refused a step. The message names the step (e.g. `spawn` or `deletePages`), the error and the viewer; send the message text to a developer. Open the PDF in Adobe Acrobat Pro or Standard meanwhile. To see what that viewer allows, build `python tools/reader_test.py`, open `out/Reader-Test.pdf` in it and click Run all tests. |
+| Clicking from one box to the next feels slow in Acrobat | The form re-checks only the questions the box you left affects. If it is still slow, build the PDF before and after your change and compare with `python tools/lag_check.py out/<form>.pdf` (Mac, Acrobat Pro); send the numbers to a developer. |
 | A browser shows the form but nothing is checked | Browsers don't run the form's checks. Download it and open it in Acrobat or Reader. |
 
 ## 6. When to ask a developer
