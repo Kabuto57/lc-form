@@ -12,7 +12,8 @@ Like the old smart form, only one thing is shown at a time: the menu page is a v
 form's pages are hidden page templates ("LC_0", "LC_1" ...). Clicking a form on the menu (or its bookmark) shows that
 form and hides the menu (showForm, in the document script "00 menu"); the "Main menu" button and bookmark hide the open
 form and show only the menu again (showMenu). The tick box (field "ACCEPT") is on the menu page. This needs Acrobat (not the free Reader, which may not show or hide
-pages) with JavaScript on; without JavaScript only the menu page is visible.
+pages) with JavaScript on; without JavaScript only the menu page is visible. If the viewer refuses, the menu shows a
+message with the error and the viewer's name (failed(), in "00 menu").
 Each form keeps its own rules and QR code: Check form, Reset form, Generate QR Code and Print Form work on that form
 only (its fields are renamed "LC.applicant_name", "BG.applicant_name" ..., and its scripts are made to match).
 Needs the form files below (in forms/) and the engine files in this folder. No terms and conditions pages: the old form has them
@@ -157,7 +158,9 @@ def tick_box(out, page, rect):
 # The document script "00 menu". The menu page is the named page "MENU" and each form's pages are page templates
 # CODE_0, CODE_1 ... Showing a template adds its page at the end; a PDF must keep at least one page, so the page(s) to
 # show are shown BEFORE the others are hidden. What is shown now is read from the document (which templates are not
-# hidden), not kept in a variable, so it is still right after the PDF is saved and opened again.
+# hidden), not kept in a variable, so it is still right after the PDF is saved and opened again. If the viewer refuses
+# (Adobe says the free Acrobat Reader may not let a script show or hide pages), failed() says so and names the viewer, instead of
+# doing nothing.
 MENU_JS = """var FORMS = __FORMS__;
 function current(d) {
   for (var code in FORMS) if (!d.getTemplate(code + "_0").hidden) return code;
@@ -171,18 +174,26 @@ function showForm(d, code) {
     app.alert("Please tick the box to agree to the Bank's terms and conditions before opening a form.", 3);
     return;
   }
-  var was = current(d);
-  if (code == was) return;
-  for (var k = 0; k < FORMS[code]; k++) d.getTemplate(code + "_" + k).hidden = false;
-  if (was == "MENU") d.getTemplate("MENU").hidden = true; else hideForm(d, was);
-  d.pageNum = 0;
+  try {
+    var was = current(d);
+    if (code == was) return;
+    for (var k = 0; k < FORMS[code]; k++) d.getTemplate(code + "_" + k).hidden = false;
+    if (was == "MENU") d.getTemplate("MENU").hidden = true; else hideForm(d, was);
+    d.pageNum = 0;
+  } catch (e) { failed(e); }
 }
 function showMenu(d) {
-  var was = current(d);
-  if (was == "MENU") return;
-  d.getTemplate("MENU").hidden = false;
-  hideForm(d, was);
-  d.pageNum = 0;
+  try {
+    var was = current(d);
+    if (was == "MENU") return;
+    d.getTemplate("MENU").hidden = false;
+    hideForm(d, was);
+    d.pageNum = 0;
+  } catch (e) { failed(e); }
+}
+function failed(e) {
+  app.alert("This PDF viewer would not open the form (" + e.name + ": " + e.message + "). Viewer: " + app.viewerType + " "
+    + app.viewerVersion + ". The free Acrobat Reader may not let a form show or hide pages: try Adobe Acrobat Pro or Standard.", 1);
 }
 """
 

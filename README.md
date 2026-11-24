@@ -788,3 +788,7 @@ layout: box widths are worked out from the label and `max`.
     printing from page 1 of the form (the menu is no longer a page beside it). Checked in Acrobat Pro: opens as 1 page
     (13 links, ACCEPT = Off); ticked LC -> 4 pages; Main menu -> 1 page, 13 links, ACCEPT still Yes; BG -> 3 pages;
     back to LC keeps its answers. The alert text itself and clicking with the mouse were not checked.
+33. **The menu says why a form did not open.** `build_all.py`: if the PDF viewer refuses to show or hide pages (Adobe
+    says the free Acrobat Reader may not allow it), the menu now shows a message with the error and the viewer's name
+    and version, instead of doing nothing. Reported 24 Nov: on a work computer the tick-box message worked but a ticked
+    form did not open.

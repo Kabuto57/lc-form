@@ -151,6 +151,7 @@ these codes; use `read_qr.py` or a QR reader that shows the text.
 | `PROBLEM IN acrobat_js.py ... characters that break Acrobat` | The file changed while being copied. Copy it again with Download raw file. |
 | `The library pikepdf is not installed` | Run the setup step again: `pip install -r requirements.txt`. |
 | In Acrobat: no calendars, red boxes never turn black, Check form says the checks did not start | JavaScript is off in Acrobat: yellow bar > Options > Enable JavaScript, or Preferences > JavaScript > Enable Acrobat JavaScript. Then close and reopen the PDF. |
+| In the one-PDF menu (`build_all.py`): a message says "This PDF viewer would not open the form" | The viewer would not show or hide pages. The message names the viewer: if it says Reader, open the PDF in Adobe Acrobat Pro or Standard. Send the message text to a developer. |
 | A browser shows the form but nothing is checked | Browsers don't run the form's checks. Download it and open it in Acrobat or Reader. |
 
 ## 6. When to ask a developer
