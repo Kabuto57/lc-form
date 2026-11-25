@@ -699,6 +699,7 @@ class Layout:
         self.last_question_page = self.page.number
         self.spare = self.top - BOTTOM   # room left on the last page of questions (build.py uses it)
         self.draw_qr_page()
+        self.draw_qr_extra()
         self.draw_footers()
 
     def draw_title(self):
@@ -773,12 +774,12 @@ class Layout:
     def draw_qr_page(self):
         """A last page with room for two QR codes of the answers, one above the other. The Generate QR Code and Print
         Form buttons sit right under the first code, where they always were. acrobat_js.py draws the codes in
-        Acrobat: usually one code fills the first frame; only when the answers are too long for one code does the
-        second frame (under the buttons) appear, with the rest."""
+        Acrobat: usually one code fills the first frame; when the answers are too long for one code the second frame
+        (under the buttons) appears, and when they need more than two, codes 3 to 16 go on extra pages (draw_qr_extra)."""
         self.new_page()
         self.text("APPLICATION QR CODE (FOR BANK USE)", M, H - 56, 11, True)
         y = H - 70
-        for line in wrap("When the form is filled in, press Generate QR Code (under the code), then Print Form. The Bank scans the code to read the application (all the answers, as JSON). If the answers are too long for one code, a second code appears under the buttons: the Bank scans both. Do not write on or fold the codes.", 8, W - 2 * M):
+        for line in wrap("When the form is filled in, press Generate QR Code (under the code), then Print Form. The Bank scans the code to read the application (all the answers, as JSON). If the answers are too long for one code, more codes appear: a second one under the buttons and, for very long answers, more on extra pages after this one (up to 16 in all). The Bank scans all of them. Do not write on or fold the codes.", 8, W - 2 * M):
             self.text(line, M, y, 8, color=GREY)
             y -= 10
         label, gap, button_h = 12, 10, 22   # room for "QR code 1 of 2" above each frame; space around the buttons
@@ -789,6 +790,21 @@ class Layout:
         self.qr = {"page": self.page.number, "slots": [(x, first_y, size), (x, buttons_y - gap - label - size, size)],
                    "button": ((W - 312) / 2, buttons_y)}
         self.rect(x, first_y, size, size, border=RULE, border_width=0.5)   # the second frame is a field, shown when needed
+
+    def draw_qr_extra(self):
+        """The extra QR code page: a hidden page template (not in self.pages, so not in the form), named "qrx". Generate QR Code
+        copies it after the QR code page once for every two codes beyond the first two, and deletes the copies it no longer
+        needs, so a form only has the pages its answers use. Same two frames as the QR code page, same size."""
+        self.new_page()
+        self.qr_extra = self.pages.pop()   # new_page numbered it after the last page; it is a template, not a page
+        page = self.qr_extra
+        self.text("APPLICATION QR CODE (CONTINUED)", M, H - 56, 11, True)
+        y = H - 70
+        for line in wrap("More codes of the same application, continuing from the QR code page. The Bank scans every code, in order. Do not write on or fold the codes.", 8, W - 2 * M):
+            self.text(line, M, y, 8, color=GREY)
+            y -= 10
+        self.line(M, 36, W - M, 36, 0.5, RULE, page=page)
+        self.text(safe(self.form.get("formCode") or self.form["title"]), M, 24, 7, color=GREY, page=page)
 
     def draw_footers(self):
         """Every page: form code, "Page n of N", and "< Previous page" / "Next page >" links (plain PDF links, so

@@ -8,7 +8,9 @@ Builds each form file (the same way as build.py), then joins them into one PDF:
   - each form, as built on its own (questions, rules, Check form / Reset form, QR code page), plus a
     "Main menu" button on every page.
   - bookmarks for every form.
-The menu is the ordinary page 0 and always stays; every form's pages are hidden page templates ("LC_0", "LC_1" ...).
+The menu is the ordinary page 0 and always stays; every form's pages are hidden page templates ("LC_0", "LC_1" ...), and so is
+each form's extra QR code page ("LC_qrx"; Generate QR Code spawns it after the form's QR code page for codes 3 to 16, two per
+page, and deletes the copies it no longer needs; a form needs it only for long answers).
 Clicking a form on the menu (or its bookmark) copies that form's pages in after the menu with Template.spawn, and deletes
 the copies of the form that was open (showForm, in the document script "00 menu"; it asks first, because the open form's
 answers are cleared). The "Main menu" button and bookmark (showMenu) ask the same, then delete the form's pages and clear its
@@ -52,7 +54,8 @@ MENU = [
 # The wording beside the tick box on the menu page (change it here).
 TERMS_TEXT = "I have read and agree to the Bank's terms and conditions for trade applications."
 W, H, M = PAGE_WIDTH, PAGE_HEIGHT, MARGIN
-FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWords", "lcModel", "lcDeps", "lcState")   # functions and the rules engine's variables
+FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWords", "lcModel", "lcDeps", "lcState",
+             "lcBytes", "lcCodes", "lcExtra", "lcSlot", "lcPagesFor", "lcLastPage", "lcQrCheck")   # functions and the rules engine's variables
 
 
 # ==================================================================================================================
@@ -61,11 +64,12 @@ FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWor
 def scoped(js, code):
     """A form's JavaScript, rewritten for the joined PDF: its fields are "CODE.name", its functions "lcRules_CODE"
     ..., and Reset form clears only this form, and Print Form leaves out the menu (page 0). Only one form's pages follow
-    the menu, so the QR code page is still the last page."""
+    the menu, so the QR code page (and the extra QR code pages spawned after it) are still the last pages."""
     js = js.replace("getField(", 'getField("%s." + ' % code)
     js = js.replace("n = d.getNthFieldName(i);", 'n = d.getNthFieldName(i); if (n.indexOf("%s.") != 0) continue; n = n.slice(%d);' % (code, len(code) + 1))
     js = re.sub(r"\b(%s)\b" % "|".join(FUNCTIONS), lambda m: m.group(1) + "_" + code, js)
-    js = js.replace("this.print(true, 0, this.numPages - 1, false, true)", "this.print(true, 1, this.numPages - 1, false, true)")
+    js = js.replace("this.print(true, 0, ", "this.print(true, 1, ")   # from page 1: the menu is page 0
+    js = js.replace('getTemplate("qrx")', 'getTemplate("%s_qrx")' % code)   # this form's extra QR code page
     js = js.replace("this.resetForm();", 'this.resetForm(["%s"]);' % code)
     # the hidden __checks calculation (one per form, 13 in all) does nothing unless this form is the open one
     js = js.replace("/*calc*/", 'if (String(this.getField("OPEN").value) == "%s") ' % code)
@@ -256,7 +260,7 @@ def main():
     warnings.filterwarnings("ignore", message="Copying pages")   # the fields are joined by hand below
     out = pikepdf.new()
     menu_page = new_page(out, [])
-    entries, fields, recalcs, scripts, pages_of = [], [], [], [], {}
+    entries, fields, recalcs, scripts, pages_of, qr_extra = [], [], [], [], {}, {}
     for group, forms in MENU:
         for file, code in forms:
             spec = load_form(file)   # from the forms folder
@@ -271,6 +275,7 @@ def main():
                 f.Parent = parent
                 parent.Kids.append(f)
             doc_js = src.make_indirect(src.Root.Names.JavaScript.Names[1])
+            extra_page = src.Root.Names.Templates.Names[1]   # the extra QR code page (template "qrx"): not one of the form's pages
             calc = [f for f in src.Root.AcroForm.Fields if str(f.T) == "__checks"]
             out.pages.extend(src.pages)
             fields.append(out.copy_foreign(parent))
@@ -291,6 +296,7 @@ def main():
             title = spec.FORM["title"]
             entries.append((group, title, re.search(r"[A-Z]+-\d+", spec.FORM["formCode"]).group(0), code))
             pages_of[code] = [out.pages[i].obj for i in range(first, last + 1)]
+            qr_extra[code] = out.copy_foreign(extra_page)   # the same copy the fields' widgets point to (see the assert at the end)
 
     # the menu page
     ops = header("Trade Application Forms") + [text_op("Please select the form that you require. The form opens after this page; Main menu brings you back here and clears the form.", M, H - 76, 9)]
@@ -325,7 +331,8 @@ def main():
 
     # every form's pages become hidden page templates: taken out of the page list, named in /Templates
     templates = Array()
-    for name, page in sorted((f"{code}_{k}", page) for code, pages in pages_of.items() for k, page in enumerate(pages)):
+    for name, page in sorted([(f"{code}_{k}", page) for code, pages in pages_of.items() for k, page in enumerate(pages)] +
+                             [(f"{code}_qrx", page) for code, page in qr_extra.items()]):
         templates.append(String(name))   # a name tree: names in sorted order
         templates.append(page)
     del out.pages[1:]   # the menu stays: it is the one page at open
@@ -361,7 +368,13 @@ def main():
     assert not problems, problems
     tops = [str(f.T) for f in check.Root.AcroForm.Fields]
     assert len(tops) == len(set(tops)) == len(entries) + 2 and "ACCEPT" in tops and "OPEN" in tops, tops
-    assert len(check.pages) == 1 and len(check.Root.Names.Templates.Names) == 2 * sum(map(len, pages_of.values()))
+    assert len(check.pages) == 1 and len(check.Root.Names.Templates.Names) == 2 * (sum(map(len, pages_of.values())) + len(entries))
+    names = {str(n): p for n, p in zip(*[iter(check.Root.Names.Templates.Names)] * 2)}
+    for entry in entries:   # each form's extra QR code page is its template, and its QR rows sit on that very page
+        code = entry[3]
+        row = next(f for f in check.Root.AcroForm.Fields if str(f.T) == code).Kids
+        row = next(k for k in row if str(k.T) == "__qrx_1_5").Kids[0]
+        assert row.P.objgen == names[f"{code}_qrx"].objgen, f"{code}: extra QR rows are not on the template"
     assert Name.Pages not in check.Root.Names
     open_w = [a for a in check.pages[0].obj.Annots if str(a.get("/T")) == "OPEN"]
     assert len(open_w) == 1 and open_w[0].F == 2 and open_w[0].Ff == 1, "OPEN field wrong"

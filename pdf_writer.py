@@ -31,7 +31,7 @@ from layout import (ACCENT, FORMATS, INK, MARGIN, PAGE_HEIGHT, PAGE_WIDTH, RULE,
 #      into DOCUMENT_JS (the rules engine, the QR code's text and the QR encoder): the one document-level
 #      script stored in the PDF, named "lcRules".
 #   2. says when the rules run: when a tick box or option is clicked, and when the person leaves a box
-#   3. adds the hidden helper fields, the rows of the two QR codes, and the buttons (Check form, Reset form on every page;
+#   3. adds the hidden helper fields, the rows of the QR codes, and the buttons (Check form, Reset form on every page;
 #      Generate QR Code and Print Form on the QR page)
 # It only adds field descriptions to the layout; step 3 makes the PDF objects.
 
@@ -187,24 +187,32 @@ def add_scripts(layout):
     # "comb" text boxes, one per row of the code (a comb box spaces its characters evenly). Each dark square is
     # the letter "n" in the ZapfDingbats font, which prints as a solid black square. This avoids Acrobat's own
     # barcode feature, which some installations don't have.
-    # There are two codes' worth of rows: "__qr1_0" ... "__qr1_176" and "__qr2_0" ... "__qr2_176". The second code,
-    # its frame ("__qr2_frame") and the labels ("__qr1_label", "__qr2_label") stay empty / hidden unless the
-    # answers are too long for one code.
+    # Codes 1 and 2 sit on the QR code page: rows "__qr1_0" ... "__qr1_176" and "__qr2_0" ... "__qr2_176". The second
+    # code, its frame ("__qr2_frame") and the labels ("__qr1_label", "__qr2_label") stay empty / hidden unless the answers are
+    # too long for one code. Codes 3 to 16 go on the hidden page template "qrx" (two codes: "__qrx_1_..." and "__qrx_2_...",
+    # each with a label and a frame), which Generate QR Code copies after the QR code page, once per two codes needed.
     qr = layout.qr
     layout.page = layout.pages[qr["page"]]
     holder = layout.add_field("__qr", "text", size=3)
     layout.add_widget(holder, -20, -20, 1, 1, hidden=True, border=INK, bg=WHITE)
-    for k, (x, y0, size) in enumerate(qr["slots"], 1):
-        label = layout.add_field(f"__qr{k}_label", "text", read_only=True, size=8)
+
+    def qr_slot(tag, x, y0, size, frame):
+        label = layout.add_field(f"__{tag}_label", "text", read_only=True, size=8)
         layout.add_widget(label, x, y0 + size + 1, size, 10)
-        if k > 1:
-            frame = layout.add_field(f"__qr{k}_frame", "text", read_only=True)
-            layout.add_widget(frame, x, y0, size, size, hidden=True, border=RULE, border_width=0.5)
+        if frame:
+            box = layout.add_field(f"__{tag}_frame", "text", read_only=True)
+            layout.add_widget(box, x, y0, size, size, hidden=True, border=RULE, border_width=0.5)
         module = size / 185   # 177 squares + 4 squares of white margin on each side
         font_size = "/ZaDb %s Tf 0 g" % fmt(round(module / 0.692 * 1000) / 1000)   # the square is 0.692 of the font size
         for y in range(177):
-            row = layout.add_field(f"__qr{k}_{y}", "text", max=177, comb=True, appearance=font_size)
+            row = layout.add_field(f"__{tag}_{y}", "text", max=177, comb=True, appearance=font_size)
             layout.add_widget(row, x + 4 * module, y0 + size - (5 + y) * module, 177 * module, module)
+
+    for k, (x, y0, size) in enumerate(qr["slots"], 1):
+        qr_slot(f"qr{k}", x, y0, size, k > 1)
+    layout.page = layout.qr_extra
+    for k, (x, y0, size) in enumerate(qr["slots"], 1):
+        qr_slot(f"qrx_{k}", x, y0, size, True)
 
     # Buttons a section adds (buttons=[...] in the form file): what each does.
     for field in layout.fields:
@@ -262,6 +270,7 @@ REQUIRED, READ_ONLY, MULTILINE, COMB, DROP_DOWN, RADIO, PUSH_BUTTON = 2, 1, 4096
 class Writer:
     def __init__(self, layout, doc_script):
         self.layout, self.doc_script = layout, doc_script
+        self.looks = {}   # drawings already made, by (width, height, drawing): see appearance()
 
     def write(self):
         """Builds and returns the pikepdf document."""
@@ -277,6 +286,11 @@ class Writer:
                                                      Resources=Dictionary(Font=Dictionary(F1=helvetica, F2=helvetica_bold)),
                                                      Contents=drawing)))
         pages = [p.obj for p in pdf.pages]
+        # The extra QR code page is a hidden page template, not in the page list: widgets refer to it as the page after the last.
+        template = pdf.make_indirect(Dictionary(Type=Name.Template, MediaBox=[0, 0, PAGE_WIDTH, PAGE_HEIGHT],
+                                                Resources=Dictionary(Font=Dictionary(F1=helvetica, F2=helvetica_bold)),
+                                                Contents=pdf.make_stream(zlib.compress(" ".join(layout.qr_extra.ops).encode("cp1252", "replace")), Filter=Name.FlateDecode)))
+        pages.append(template)
         # Fonts the fields use: Helvetica for text, ZapfDingbats for the tick, radio dot and QR squares.
         zapf = pdf.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.ZapfDingbats))
         self.fonts = Dictionary(Helvetica=helvetica, Helv=helvetica, ZaDb=zapf)
@@ -311,7 +325,8 @@ class Writer:
 
         # 5. The document script ("lcRules"), and the warning before saving (WS) or printing (WP) an incomplete form.
         stream = pdf.make_stream(zlib.compress(self.doc_script.encode("latin-1", "replace")), Filter=Name.FlateDecode)
-        pdf.Root[Name.Names] = Dictionary(JavaScript=Dictionary(Names=[String("lcRules"), Dictionary(S=Name.JavaScript, JS=stream)]))
+        pdf.Root[Name.Names] = Dictionary(JavaScript=Dictionary(Names=[String("lcRules"), Dictionary(S=Name.JavaScript, JS=stream)]),
+                                          Templates=Dictionary(Names=[String("qrx"), template]))
         pdf.Root[Name.AA] = Dictionary(WS=self.javascript(script("before-save")), WP=self.javascript(script("before-save")))
         return pdf
 
@@ -321,9 +336,13 @@ class Writer:
         return Dictionary(S=Name.JavaScript, JS=String(code))
 
     def appearance(self, w, h, drawing):
-        """A small drawing (form XObject) of how a box looks, w x h points."""
-        return self.pdf.make_stream(drawing.encode("latin-1", "replace"), Type=Name.XObject, Subtype=Name.Form,
-                                    BBox=[0, 0, num(w), num(h)], Resources=Dictionary(Font=self.fonts))
+        """A small drawing (form XObject) of how a box looks, w x h points. Boxes that look the same (the QR code's thousands
+        of rows) share one drawing, which keeps the file small."""
+        key = (num(w), num(h), drawing)
+        if key not in self.looks:
+            self.looks[key] = self.pdf.make_stream(drawing.encode("latin-1", "replace"), Type=Name.XObject, Subtype=Name.Form,
+                                                   BBox=[0, 0, num(w), num(h)], Resources=Dictionary(Font=self.fonts))
+        return self.looks[key]
 
     def frame(self, widget, w, h):
         """Drawing commands for a box's background and border."""
@@ -548,7 +567,8 @@ def self_check(pdf_bytes, spec):
 
     # The document script holds the rules table, the QR code's text and the QR encoder.
     doc_script = zlib.decompress(pdf.Root.Names.JavaScript.Names[1].JS.read_raw_bytes()).decode("latin-1")
-    for name in ("function lcRules(", "function lcDates(", "function lcPayload(", "function lcQrMatrix(", "function lcDrawQr("):
+    for name in ("function lcRules(", "function lcDates(", "function lcPayload(", "function lcQrMatrix(", "function lcDrawQr(",
+                 "function lcExtra(", "function lcQrCheck(", "function lcLastPage("):
         assert name in doc_script, f"script lacks {name}"
     table = json.loads(re.search(r"var lcModel = (\{.*?\});\n", doc_script).group(1))
     assert "__DEPS__" not in doc_script, "the index of dependencies was not filled in"
@@ -565,5 +585,14 @@ def self_check(pdf_bytes, spec):
     assert len(fields["__check_form"].Kids) == len(pdf.pages), "Check form should be on every page"
     assert all(f"__qr{k}_{y}" in fields for k in (1, 2) for y in range(177)), "missing QR code rows"
     assert int(fields["__qr2_frame"].Kids[0].F) == 2, "the second QR frame should start hidden"
+    # The extra QR code page: a hidden template "qrx" (not one of the pages) holding the rows, labels and frames of codes 3 and 4.
+    templates = pdf.Root.Names.Templates.Names
+    assert [str(templates[0])] == ["qrx"] and templates[1].Type == Name.Template, "the extra QR code page template is missing"
+    assert not any(p.objgen == templates[1].objgen for p in pdf.pages), "the extra QR code page should not be one of the pages"
+    for k in (1, 2):
+        assert all(f"__qrx_{k}_{y}" in fields for y in range(177)) and f"__qrx_{k}_label" in fields, "missing the extra QR code rows"
+        assert int(fields[f"__qrx_{k}_frame"].Kids[0].F) == 2, "the extra QR frames should start hidden"
+        assert all(w.P.objgen == templates[1].objgen for y in (0, 176) for w in fields[f"__qrx_{k}_{y}"].Kids), "extra QR rows must sit on the template"
+    assert "bRename: true" in doc_script and 'getTemplate("qrx")' in doc_script, "the script does not spawn the extra QR page"
     assert "/WS" in pdf.Root.AA and "/WP" in pdf.Root.AA, "missing the warning before save / print"
     return f"PASS: {len(pdf.pages)} pages, {len(fields)} fields, rules table, scripts, buttons and QR rows OK"

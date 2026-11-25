@@ -7,7 +7,8 @@ The __NAMES__ in capitals are filled in for each form by document_script() in pd
 """
 
 # The document script, stored in the PDF as "lcRules": the rules engine (red boxes, locking, checks), the QR
-# code's text (lcPayload), the QR encoder (lcQrMatrix) and drawing (lcDrawQr).
+# codes' text (lcPayload), the QR encoder (lcQrMatrix), and the drawing of up to 16 codes over the QR page and the extra QR
+# pages (lcDrawQr, lcExtra, lcQrCheck).
 DOCUMENT_JS = r"""
 // THE RULES ENGINE (runs inside Acrobat). Built into the PDF as the document script "lcRules".
 // lcRules(doc) checks every question and colours its box:
@@ -225,17 +226,23 @@ function lcDates(d) {
 var lcWarnedAt = 0;
 // On opening in Acrobat: show the calendars, and set every box's colour and lock.
 if (typeof app != "undefined" && /^(Exchange|Reader)/.test(app.viewerType)) { lcDates(this); lcRules(this); }
-// THE QR CODE'S TEXT. lcPayload(doc) returns every answered question as JSON:
+// THE QR CODES' TEXT. lcPayload(doc) returns every answered question as JSON:
 //   {"form": "LC-01", "version": "1.0", "saved": "...", "complete": true, "data": {field id: answer, ...}}
-// Tick boxes become true; "tick any" questions become lists of the ticked options. One QR code holds 2,300
-// characters of it; longer answers take two codes (lcDrawQr splits the text). The text is padded with spaces to
-// 2,300 (or 4,600 for two codes). __GROUPS__, __LONG__, __FORM__ and __VERSION__ are filled in by document_script
-// (step 2).
+// Tick boxes become true; "tick any" questions become lists of the ticked options. One QR code holds 2,300 bytes of it
+// (LC_QR_CAP); longer answers take as many codes as they need, at most 16 (LC_QR_MAX, the most that "structured append"
+// allows; lcDrawQr splits the text). The text is padded with spaces to fill the codes it needs: 2,300, 4,600 ... 36,800
+// bytes. Only beyond 16 codes are the long paragraphs shortened (and listed in "truncated"). __GROUPS__, __LONG__,
+// __FORM__ and __VERSION__ are filled in by document_script (step 2).
+var LC_QR_CAP = 2300, LC_QR_MAX = 16;
+// The text as UTF-8 bytes, one character per byte (what goes into the codes).
+function lcBytes(s) { return unescape(encodeURIComponent(s)); }
+// How many codes this text needs (0 for no text).
+function lcCodes(s) { return s ? Math.ceil(lcBytes(s).length / LC_QR_CAP) : 0; }
 function lcPayload(d) {
-var G = {__GROUPS__}, LONG = __LONG__, CAP = 2300;
+var G = {__GROUPS__}, LONG = __LONG__, CAP = LC_QR_CAP, BUDGET = LC_QR_MAX * LC_QR_CAP;
 var data = {}, i, n, f, k, v, g, m, out, cut = [], ok = true, t = new Date();
 for (i = 0; i < d.numFields; i++) {
-  n = d.getNthFieldName(i); if (/^__/.test(n) || /__list$/.test(n)) continue;
+  n = d.getNthFieldName(i); if (/^__/.test(n) || /__list$/.test(n) || /__qrx_/.test(n)) continue;
   f = d.getField(n); if (!f || f.type == "button" || f.type == "signature") continue;
   g = /^(.+)__(\d+)$/.exec(n);
   if (g && G[g[1]]) { if (f.value != "Off") { if (!data[g[1]]) data[g[1]] = []; data[g[1]].push(G[g[1]][+g[2]]); } continue; }
@@ -246,22 +253,23 @@ for (i = 0; i < d.numFields; i++) {
 if (typeof lcRules == "function") { m = lcRules(d); ok = !m.length && !(m.bad || []).length; }
 function pad(x) { return ("0" + x).slice(-2); }
 out = {"form": __FORM__, "version": __VERSION__, "saved": t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate()) + "T" + pad(t.getHours()) + ":" + pad(t.getMinutes()), "complete": ok, "data": data};
-// Two QR codes hold 4,600 characters: if the answers are longer still, shorten the two long paragraphs and say so.
-for (i = 0; i < LONG.length && JSON.stringify(out).length > 2 * CAP; i++) {
+// 16 codes hold 36,800 bytes: only if the answers are longer still, shorten the long paragraphs (in order) and say so.
+for (i = 0; i < LONG.length && lcBytes(JSON.stringify(out)).length > BUDGET; i++) {
   k = LONG[i]; if (!data[k]) continue;
   cut.push(k); out.truncated = cut;
-  v = JSON.stringify(out).length - 2 * CAP + 3;
+  v = lcBytes(JSON.stringify(out)).length - BUDGET + 3;
   data[k] = v < data[k].length ? data[k].slice(0, data[k].length - v) + "..." : "...";
 }
-// Padded with spaces to fill one code (2,300) or, when it doesn't fit in one, two codes (4,600).
-v = JSON.stringify(out); n = v.length > CAP ? 2 * CAP : CAP; while (v.length < n) v += " ";
+// Padded with spaces to fill the codes it needs (2,300 bytes each).
+v = JSON.stringify(out); n = lcBytes(v).length; m = Math.max(1, Math.ceil(n / CAP)) * CAP - (n - v.length);
+while (v.length < m) v += " ";
 return v;
 }
 // THE QR CODE ENCODER AND DRAWING (standard QR code, no library needed).
 // lcQrMatrix(bytes, part) returns the 177 x 177 grid of a version 40 QR code (true = dark square). bytes is the
 // text as UTF-8 bytes (one character per byte). part is null for a single code, or [index, total, parity] for
-// one of several codes ("structured append", part of the QR standard: each code says it is code 1 or 2 of 2,
-// so a scanner that supports it joins them; any other scanner reads each code's text, and the two texts are
+// one of several codes ("structured append", part of the QR standard: each code says it is code k of n, n at
+// most 16, so a scanner that supports it joins them; any other scanner reads each code's text, and the texts are
 // joined in order). Version 40, error correction M, byte mode, mask 0; at most 2,329 bytes per code.
 function lcQrMatrix(s, part) {
   var N = 177, i, j, x, y, m = [], f = [], bytes = [];
@@ -327,27 +335,79 @@ function lcQrMatrix(s, part) {
   for (y = 0; y < N; y++) for (x = 0; x < N; x++) if (!f[y][x] && (x + y) % 2 == 0) m[y][x] = !m[y][x];
   return m;
 }
-// lcDrawQr(doc, text) draws text as one QR code, or as two when it is too long for one, and returns how many.
-// Each code's rows go into the read-only text boxes "__qr1_0" ... "__qr1_176" (and "__qr2_..."), as the letter
-// "n" in the ZapfDingbats font (which prints as a black square) for each dark square. The second code's frame
-// and the "QR code 1 of 2" labels appear only when there are two. lcDrawQr(doc, "") clears both.
+// THE PAGES THE CODES GO ON. Codes 1 and 2 sit on the form's QR code page (rows "__qr1_0" ... "__qr1_176", "__qr2_..."),
+// each row a read-only text box holding the letter "n" in the ZapfDingbats font (which prints as a black square) for each
+// dark square. Codes 3 to 16 go two to a page on extra pages, which exist only while needed: lcDrawQr copies the hidden page
+// template "qrx" (rows "__qrx_1_0" ... "__qrx_2_176") after the last page with Template.spawn, and deletes the pages it no
+// longer needs (when the viewer refuses to delete one, the page stays, empty and marked "not used", and is left out of
+// printing: lcLastPage). A spawned page's fields are renamed by the viewer (bRename: true) but still end in the template's
+// name, so lcExtra finds them by that ending. Don't write "getField(" for those fields: build_all.py rewrites it
+// to add the form's code in the joined PDF; d["getField"](name) is left alone, and the names found are already complete.
+// lcExtra(doc) returns the spawned pages' field-name prefixes, in page order: [{p: prefix, page: page number}].
+function lcExtra(d) {
+  var out = [], i, nm, m, f, q = d.getField("__qr"), first = q && typeof q.page == "number" ? q.page : -1;
+  for (i = 0; i < d.numFields; i++) {
+    nm = d.getNthFieldName(i); m = /^(.*)__qrx_1_0$/.exec(nm);
+    if (!m || /^([A-Z]+\.)?$/.test(m[1])) continue;     // not a row, or the template's own row ("" or the form's code)
+    f = d["getField"](nm);
+    if (f && typeof f.page == "number" && f.page > first && f.page < d.numPages) out.push({p: m[1], page: f.page});
+  }
+  out.sort(function (a, b) { return a.page - b.page; });
+  return out;
+}
+// Code j (0 = first) as a function: x -> the field "<row>" or "label" or "frame" of its slot.
+function lcSlot(d, pg, j) {
+  var t = j < 2 ? "__qr" + (j + 1) : "__qrx_" + ((j - 2) % 2 + 1), p = j < 2 ? null : pg[(j - 2) >> 1] && pg[(j - 2) >> 1].p;
+  return function (x) { return p === null ? d.getField(t + "_" + x) : p === undefined ? null : d["getField"](p + t + "_" + x); };
+}
+// Extra pages that n codes need.
+function lcPagesFor(n) { return n > 2 ? Math.ceil((n - 2) / 2) : 0; }
+// The last page of the form as printed: the QR code page, plus the extra pages the codes of this text use.
+function lcLastPage(d, text) { return d.getField("__qr").page + lcPagesFor(lcCodes(text)); }
+// "" when the codes on the pages are exactly those of this text (every code in use has its first row drawn, every other
+// slot is empty); otherwise what is wrong. Used before printing.
+function lcQrCheck(d, text) {
+  var n = lcCodes(text), pg = lcExtra(d), j, f;
+  if (pg.length < lcPagesFor(n)) return "the extra QR code pages are missing";
+  for (j = 0; j < 2 + 2 * pg.length || j < n; j++) {
+    f = lcSlot(d, pg, j)("0");
+    if (!f) return "QR code " + (j + 1) + " is missing";
+    if ((f.value !== "") != (j < n)) return j < n ? "QR code " + (j + 1) + " is blank" : "QR code " + (j + 1) + " is left over";
+  }
+  return "";
+}
+// lcDrawQr(doc, text) draws text as one QR code, or as many as it needs (at most 16, one per 2,300 bytes), and returns how
+// many (0 for ""; lcDrawQr(doc, "") clears everything and removes the extra pages). The text is cut into consecutive
+// equal slices; each code carries the structured-append header (its index, the total, the parity of the whole text), so a
+// scanner that supports it joins them, and any other scanner reads each slice and the slices are joined in order. The
+// frames, and the labels "QR code 1 of 3 (scan all 3 codes)", show only for codes in use.
 function lcDrawQr(d, text) {
-  var ONE = 2329, s = unescape(encodeURIComponent(text)), parts = [], codes = [], parity = 0, i, k, y, x, row, calc = d.calculate;
-  if (s.length > 2 * ONE) throw new Error("the answers are too long for two QR codes (" + s.length + " characters, at most " + 2 * ONE + ")");
+  var s = lcBytes(text), n = lcCodes(text), size = n ? Math.ceil(s.length / n) : 0, codes = [], parity = 0, i, k, j, y, x, row, pg, f, g, put, calc = d.calculate, more;
+  if (n > LC_QR_MAX) throw new Error("the answers are too long for " + LC_QR_MAX + " QR codes (" + s.length + " bytes, at most " + LC_QR_MAX * LC_QR_CAP + ")");
   for (i = 0; i < s.length; i++) parity ^= s.charCodeAt(i) & 255;
-  if (s.length > ONE) parts = [s.slice(0, Math.ceil(s.length / 2)), s.slice(Math.ceil(s.length / 2))];
-  else if (s.length) parts = [s];
-  for (k = 0; k < parts.length; k++) codes.push(lcQrMatrix(parts[k], parts.length > 1 ? [k, parts.length, parity] : null));
-  d.calculate = false; // 354 rows: don't re-run the checks after each one
+  for (k = 0; k < n; k++) codes.push(lcQrMatrix(s.slice(k * size, (k + 1) * size), n > 1 ? [k, n, parity] : null));   // all made before anything is touched
+  d.calculate = false; // thousands of rows: don't re-run the checks after each one
   try {
-    for (k = 1; k <= 2; k++) {
-      for (y = 0; y < 177; y++) { row = ""; if (codes[k - 1]) for (x = 0; x < 177; x++) row += codes[k - 1][y][x] ? "n" : " ";
-        d.getField("__qr" + k + "_" + y).value = row; }
-      d.getField("__qr" + k + "_label").value = codes.length > 1 ? "QR code " + k + " of 2" + (k == 1 ? " (scan both codes)" : "") : "";
+    pg = lcExtra(d);
+    for (more = lcPagesFor(n); pg.length < more; ) {                // add the pages that are needed
+      d.getTemplate("qrx").spawn({nPage: d.numPages, bRename: true, bOverlay: false});
+      g = lcExtra(d); if (g.length <= pg.length) throw new Error("the viewer did not add the page for QR code " + (2 * pg.length + 3));
+      pg = g;
     }
-    d.getField("__qr2_frame").display = codes.length > 1 ? display.visible : display.hidden;
+    while (pg.length > more) {                                      // take away the pages that are not
+      try { d.deletePages(pg[pg.length - 1].page); } catch (e) { break; }
+      g = lcExtra(d); if (g.length >= pg.length) break;
+      pg = g;
+    }
+    for (j = 0; j < 2 + 2 * pg.length; j++) {                       // every slot: its code, or empty
+      put = lcSlot(d, pg, j);
+      for (y = 0; y < 177; y++) { row = ""; if (codes[j]) for (x = 0; x < 177; x++) row += codes[j][y][x] ? "n" : " ";
+        put(y).value = row; }
+      if (f = put("label")) f.value = !codes[j] ? (j % 2 == 0 && j >= 2 + 2 * more ? "(this page is not used)" : "") : n < 2 ? "" : "QR code " + (j + 1) + " of " + n + (j == 0 ? (n == 2 ? " (scan both codes)" : " (scan all " + n + " codes)") : "");
+      if (f = put("frame")) f.display = codes[j] ? display.visible : display.hidden;
+    }
   } finally { d.calculate = calc; }
-  return codes.length;
+  return n;
 }
 """[1:-1]
 
@@ -377,11 +437,12 @@ else app.alert("All mandatory questions are answered and every answer is in the 
     "reset-form": r"""
 // "RESET FORM" BUTTON: asks first, then sets every answer back to how the form started, and re-checks.
 if (app.alert("Are you sure you want to reset the form? All your answers will be cleared.", 2, 2) == 4) {
-this.resetForm(); if (typeof lcDrawQr == "function") lcDrawQr(this, ""); if (typeof lcDates == "function") lcDates(this); if (typeof lcRules == "function") lcRules(this); }
+this.resetForm(); if (typeof lcDrawQr == "function") try { lcDrawQr(this, ""); } catch (e) {} if (typeof lcDates == "function") lcDates(this); if (typeof lcRules == "function") lcRules(this); }
 """[1:-1],
     "generate-qr": r"""
 // "GENERATE QR CODE" BUTTON: refuses while anything is missing or wrong; otherwise makes the QR code from the
-// answers (lcPayload, lcDrawQr), or two codes if the answers don't fit in one, and goes to the QR code page.
+// answers (lcPayload, lcDrawQr): one code, or as many as the answers need (at most 16; codes 3 and up go on extra pages
+// after the QR code page, two to a page). Then it goes to the QR code page.
 if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
 else {
 var m = lcRules(this), b = m.bad || [], t = [];
@@ -390,30 +451,37 @@ if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" 
 if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
 if (t.length) { app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
   var g = m.first && this.getField(m.first); if (g) g.setFocus(); }
-else { try { var q = this.getField("__qr"); q.value = lcPayload(this); var n = lcDrawQr(this, q.value); this.pageNum = this.numPages - 1;
+else { try { var q = this.getField("__qr"); q.value = lcPayload(this); var n = lcDrawQr(this, q.value), cut = [];
+  try { this.pageNum = q.page; } catch (e) {}   // a viewer may refuse to change page inside a click that added pages: the codes are drawn all the same
+  try { cut = JSON.parse(q.value).truncated || []; } catch (e) {}
   if (n == 1) app.alert("The QR code has been generated from your answers (" + q.value.length + " characters). Press Print Form to print the form with the QR code.", 3);
-  else app.alert("Your answers (" + q.value.length + " characters) are too long for one QR code, so two codes have been generated, one under the other. The Bank scans both. Press Print Form to print the form with the QR codes.", 3); }
+  else app.alert("Your answers (" + q.value.length + " characters) need " + n + " QR codes, so " + n + " codes have been generated: " + (n > 2 ? "two on the QR code page and the rest, two to a page, on the " + lcPagesFor(n) + " page" + (lcPagesFor(n) > 1 ? "s" : "") + " after it" : "one under the other") + ". The Bank scans all " + n + " codes. Press Print Form to print the form with the QR codes." +
+    (cut.length ? "\n\nEven " + n + " codes are too small for everything you typed, so these long answers were shortened in the QR codes (the form itself is unchanged): " + cut.join(", ") + "." : ""), cut.length ? 1 : 3); }
   catch (e) { app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1); } }
 }
 """[1:-1],
     "print-form": r"""
 // "PRINT FORM" BUTTON: prints only once the QR code exists and still matches the current answers, so the
-// printed code always carries the answers on the paper.
-var q = this.getField("__qr"), now = typeof lcPayload == "function" ? lcPayload(this) : "", same = false;
+// printed codes always carry the answers on the paper: every code needed is on its page, none is left over, and the
+// pages after the last code in use are not printed.
+var q = this.getField("__qr"), now = typeof lcPayload == "function" ? lcPayload(this) : "", same = false, bad = "";
 try { same = JSON.stringify(JSON.parse(q.value).data) == JSON.stringify(JSON.parse(now).data); } catch (e) {}
+try { bad = lcQrCheck(this, q.value); } catch (e) { bad = String(e); }
 if (!/\S/.test(q.value)) app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
 else if (!same) app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
-else this.print(true, 0, this.numPages - 1, false, true);
+else if (bad) app.alert("The QR codes in the form do not match your answers (" + bad + "). Please press Generate QR Code again, then Print Form.", 1);
+else this.print(true, 0, lcLastPage(this, q.value), false, true);   // the form to the last QR code page in use
 """[1:-1],
     "before-save": r"""
-// BEFORE SAVING OR PRINTING: the same list as Check form, shown only if something is missing or wrong.
-// It warns but doesn't stop the save or print.
+// BEFORE SAVING OR PRINTING: the same list as Check form, shown only if something is missing or wrong, plus a warning
+// when QR codes were generated and the pages no longer hold them all (lcQrCheck). It warns but doesn't stop the save or print.
 if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
 else {
 var m = lcRules(this), b = m.bad || [], t = [];
 var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
 if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
 if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
+try { var qf = this.getField("__qr"), qb = qf && /\S/.test(qf.value) && typeof lcQrCheck == "function" ? lcQrCheck(this, qf.value) : ""; if (qb) t.push("The QR codes in the form are not complete (" + qb + "). Press Generate QR Code again."); } catch (e) {}
 // Shown once: an event that fires again within 3 seconds of the warning closing is a repeat, not a new save / print.
 if (t.length && new Date().getTime() - lcWarnedAt > 3000) {
   app.alert((event.name == "WillPrint" ? "Before printing: " : "Before saving: ") + "this form is not ready to send. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them before you send the form.", 1);

@@ -125,7 +125,7 @@ The kinds of question: `text` (one line), `long` (paragraph), `date`, `radio` (p
 3. Build it: `python build.py trade_loan_form.py`. The PDF appears in `out/`.
 
 Every form automatically gets the same features: red mandatory boxes, locking of questions that don't apply,
-Check form and Reset form buttons, and the QR code page (one code, or two when the answers are long).
+Check form and Reset form buttons, and the QR code page (one code, or as many as the answers need, up to 16: the extra codes go on extra pages that appear only while needed).
 
 ## 4. Read a filled-in form's QR code(s)
 

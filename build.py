@@ -8,10 +8,12 @@ THE FILES THAT BUILD A FORM (the engine files together in one folder, the form f
     build.py        THIS FILE. Run it. Its first section lists every kind of question and every option.
     layout.py       Step 1: where everything goes on the page (and the colours, sizes and answer formats).
     pdf_writer.py   Steps 2 and 3: adds the checks and buttons, writes the PDF, then checks the PDF.
-    acrobat_js.py   The JavaScript Acrobat runs inside the PDF (red boxes, Check form, QR codes). To stay quick it
+    acrobat_js.py   The JavaScript Acrobat runs inside the PDF (red boxes, Check form, QR codes: as many as the answers
+                    need, up to 16, the third onwards on extra QR pages that exist only while needed). To stay quick it
                     re-checks only the questions that read the box you just left (an index pdf_writer.py builds from the
                     form file), once per change, and skips writing boxes whose look is unchanged.
 You only ever edit form files. The other four are the same for every form.
+    proof_multiqr.py  Not part of the build: after changing the QR code scripts, run it to prove 1 to 16 codes decode (README).
 
 WHAT A BUILD DOES
     1. Reads the form file and checks it for mistakes (a misspelt option, a rule naming a question that doesn't
