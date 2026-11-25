@@ -882,7 +882,7 @@ layout: box widths are worked out from the label and `max`.
     (`qrx`; `LC_qrx` in the joined PDF) made with `Template.spawn` and removed when the answers shrink or the form is reset.
     The long paragraphs are shortened (and listed in `"truncated"`) only beyond 16 codes. Print Form prints up to the last QR
     page in use and refuses if a code is missing; the warning before saving or printing says so too. lc_form.py: 477 fields and
-    591,354 bytes before; 835 fields (the template's 358 added) and 549,741 bytes after (the QR row boxes now share one drawing
+    591,354 bytes before; 835 fields (the template's 358 added) and about 550,000 bytes after (the QR row boxes now share one drawing
     each). Tested outside Acrobat (`python proof_multiqr.py`: the form alone and the LC form inside the joined PDF, three
     guesses at how the viewer renames spawned fields, `deletePages` allowed and refused): 2,000 / 4,000 / 9,000 / 15,300
     characters give 1 / 2 / 4 / 7 codes, every code decodes with zxing-cpp 3.1.1 and the joined text equals the payload
