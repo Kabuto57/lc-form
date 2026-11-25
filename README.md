@@ -6,14 +6,13 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 477 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and the rows of two QR codes (177 each).
 
-- Needs Python 3.9 or later and **one library to build, pikepdf** (plus zxing-cpp to read QR codes). All its licences are permissive (no GPL/AGPL).
+- Needs Python 3.9 or later and **one library to build, pikepdf**. All its licences are permissive (no GPL/AGPL).
 - **New to this? Read [GUIDE.md](GUIDE.md) first.** It shows, step by step, how to change the form and how to make a
   similar one, without needing to know Python.
 - **A form file plus 4 engine files build the PDF:** the form (`forms/lc_form.py`, the only one you edit) and four
   engine files that are the same for every form (`build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py`). One
   command builds the PDF and checks it.
-- **Folders:** the engine files at the top; every form file in `forms/`; `tools/smartform/` holds the tools that
-  copied the old smart form (not needed to build); `benchmark/` is the QR code vs AI reading test (with scripts that make poor-quality samples).
+- **Folders:** the engine files at the top and every form file in `forms/`. The QR reader, the QR vs AI benchmark and the smart-form tools were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
 
 ## Run it
 
@@ -95,18 +94,13 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | `forms/eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
 | `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
 | `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and that form's pages are copied in after the menu (every form's pages are hidden page templates, copied with `Template.spawn` by the menu's script; choosing another form asks first and clears the open form's answers); the Main menu button on every page (and the bookmark) asks, then deletes the open form's pages and clears its answers, so the PDF is just the menu page again (if the viewer refuses to delete pages it only goes to the menu page and the form stays); bookmarks. Needs JavaScript on. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
-| `tools/reader_test.py` | **Reader test** (`python tools/reader_test.py` -> `out/Reader-Test.pdf`): a one-page PDF with a "Run all tests" button that reports which page tricks the PDF viewer allows (hide a field, reset a field, switch a layer, spawn a template copy, delete it, show a hidden template, delete an original page). Used to choose how `build_all.py`'s menu can work in the free Acrobat Reader. | Developers |
-| `tools/lag_check.py` | **Lag check** (`python tools/lag_check.py out/LC-Application.pdf out/Trade-Application-Forms.pdf`; Mac, Adobe Acrobat Pro): opens the PDF in Acrobat and reports the ms of a simulated field commit (the calculation plus the blur script) on three fields. Run it on a PDF built before a change and one built after. | Developers |
-| `tools/smartform/` | **How the trade forms were made** (not needed to build): tools that read the old vendor smart form in Adobe Acrobat (`harvest.py`, `acrobat/`), found its rules by trying every choice (`acrobat/probe.js`), and wrote first drafts of the form files (`convert.py`, `draft_forms.py`, `drafts/`). `build_smartform.py` is an earlier experiment that copies the old look into one PDF with a menu (`out/Trade-Application-Forms-old-look.pdf`). | Developers |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows. Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
 | `acrobat_js.py` | The JavaScript Acrobat runs inside the PDF: `DOCUMENT_JS` (rules engine, QR code text, QR encoder) and `BUTTON_JS` (one entry per button). Plain ASCII only. | To change how answers are checked or what a button does |
-| `read_qr.py` | **Reads the QR code(s)** from scanned images (or text from a handheld scanner), joins two codes, re-checks every answer against the form file, and saves the result as JSON in `out/`. Not needed to build. | The Bank's side |
-| `benchmark/` | **QR code vs AI test** (not needed to build): 10 fake filled-in LC scans (typed with QR, handwritten; clean / medium / poor), read by the QR code and by Gemini 3.7 Flash, scored per form and per field. Samples 21 to 30 (`benchmark/make_qr_samples.py`) are poor copies made to show how the QR code survives (phone photo, fax, blur, tears). Report: `benchmark/LC-QR-vs-AI.xlsx`; pictures in `benchmark/screenshots/`; how to re-run in `benchmark/README.md`. | To compare QR with AI |
 | `GUIDE.md` | Step-by-step guide for beginners, including copying the files to a work computer and fixing common problems. | Everyone, first |
 | `README.md` | This reference. | When you need the details |
-| `requirements.txt` | pikepdf and its three dependencies (to build), and zxing-cpp (to read QR codes), at exact versions. | Setup |
+| `requirements.txt` | pikepdf and its three dependencies, at exact versions. | Setup |
 
 **Where to change what:**
 
@@ -135,7 +129,6 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | lxml (needed by pikepdf) | BSD-3-Clause | Not used by this project directly |
 | Pillow (needed by pikepdf) | MIT-CMU | Not used by this project directly |
 | packaging (needed by pikepdf) | Apache-2.0 or BSD-2-Clause | Not used by this project directly |
-| **zxing-cpp** (only for `read_qr.py`) | Apache-2.0 | Reads the printed QR codes from scanned images. Not needed to build the PDF |
 | Python standard library | PSF | Dates, JSON, compression, file handling, and `http.server` for local hosting |
 
 All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
@@ -224,7 +217,7 @@ A wrong whole answer gets an alert when you leave the box, and the box refuses i
 
 A form file can add its own checks in `FORM["checks"]` (helpers in `build.py`): `not_before` / `after` (one date not
 before / strictly after another), `in_range` (a number between two values) and `account_length` (an account number's
-length, by currency). They run in Acrobat (`across()` in `acrobat_js.py`) and in `read_qr.py`. A question with
+length, by currency). They run in Acrobat (`across()` in `acrobat_js.py`). A question with
 `words=["amount", "currency"]` is filled in by the form with the amount in words (the bills of exchange use it).
 The LC form's own checks:
 
@@ -553,60 +546,7 @@ The bank scans the printed code (or both codes) with a QR reader and gets the JS
 
 ## Reading the QR codes
 
-`read_qr.py` is the Bank's side: it reads the printed code(s) and checks the answers.
-
-```
-.venv/bin/python read_qr.py scan.png                 # one image with one or both codes
-.venv/bin/python read_qr.py page1.jpg page2.jpg      # codes in separate images, in any order
-.venv/bin/python read_qr.py scanned.txt              # text from a handheld scanner, one code per line
-```
-
-It prints `ACCEPTED` or `NOT ACCEPTED` with the reasons, and saves `out/LC-01-<date and time>.json`:
-
-```json
-{"form": "LC-01", "version": "1.0", "saved": "2026-11-17T09:50", "codes": 2, "accepted": true,
- "problems": [], "warnings": [], "data": {"applicant_name": "TAN ENGINEERING PTE LTD", "...": "..."}}
-```
-
-What it does:
-1. **Reads every QR code** in the image(s) with zxing-cpp. PNG, JPG, BMP and TIFF (every page of a multi-page TIFF)
-   work. A scanner's PDF can't be read directly (reading PDFs as images needs another library): save the scan as an
-   image instead. Scan at 300 dpi or more.
-2. **Joins two codes.** The order is the one that makes valid JSON (code 1 of 2 always starts the JSON), so the
-   images can be given in any order. If only one of two codes is found, it says "Scan both". The same code
-   scanned twice counts once.
-3. **Finds the form file** (`forms/*_form.py`) whose form code matches the QR code's `"form"` (e.g. `LC-01`), and warns if the
-   form version differs.
-4. **Re-checks every answer** (`check_answers`, at the end of `read_qr.py`), because a QR code comes from outside the Bank and could have
-   been made or edited by anyone: unknown answers, wrong kinds of value, options that don't exist, lengths over
-   max, formats and dates, characters the form doesn't allow, mandatory questions left blank, answers to locked
-   questions, and the checks across answers (expiry after shipment, and so on). "In the future" is measured from
-   when the code was made.
-5. **Warns** (without refusing) if paragraphs were shortened to fit (`"truncated"`), or if the form itself said it
-   wasn't complete.
-
-Exit status 0 means accepted and 1 means not, so another program (the Bank's workbench) can run it and read the
-JSON.
-
-### Which library reads the codes, and why
-
-| Option | Licence | Two codes (structured append) | Notes |
-|---|---|---|---|
-| **zxing-cpp** (used here) | Apache-2.0 | reads each code; `read_qr.py` joins them | The C++ version of Google's ZXing, the most widely used open-source barcode reader (its Java original is in many Android apps). Reads dense version 40 codes, tilted and blurred scans. Prebuilt for Windows, Mac and Linux, no dependencies. Actively maintained. |
-| ZBar / pyzbar | LGPL-2.1 | no | Older, rarely updated, weaker on dense codes. LGPL is more restrictive. |
-| OpenCV QR reader | Apache-2.0 | no | A large library (about 100 MB) for one job; less reliable on version 40 codes. |
-| Commercial SDKs (Dynamsoft, Scandit, Cognex ...) | paid | yes | What some banks buy for high-volume scanning, with vendor support. Worth it only at scale. |
-| Handheld 2D scanners (Honeywell, Zebra ...) | hardware | many models can join structured-append codes (check the model's manual) | Common at bank counters. They "type" the code's text into the computer: save it as a `.txt` file (one code per line) and use `read_qr.py scanned.txt`. |
-
-zxing-cpp's Python package doesn't report which code is "1 of 2", so `read_qr.py` works out the order from the
-text instead (only one order makes valid JSON). Tested: one code; both codes on a rendered page; two images in the
-wrong order; one of two codes only (refused, "Scan both"); a blank image; a page rescaled to 300 dpi, rotated
-1.5°, blurred, speckled and saved as a low-quality JPG (read and accepted); and a QR text with 9 planted mistakes
-(all 9 reported, not accepted).
-
-**Security.** The QR text is read only as JSON (never run), limited to the size two codes can hold, and every
-value is checked against the form before anything is accepted. zxing-cpp is native code that parses images: give
-it scans from the Bank's own scanners, and keep it at the pinned version (update it like pikepdf, see Security).
+The QR reader (the Bank's side) and its tests were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
 
 ## Testing in Acrobat
 
@@ -859,3 +799,7 @@ layout: box widths are worked out from the label and `max`.
     Checked in Acrobat Pro: 18 edits to LC (amount, dates, drafts chain, insurance chain with a cascade clear, price basis)
     gave the same boxes (required, lock, colours, line width, value) after the incremental run as after a full run; in the joined
     PDF, reset + `calculateNow` followed by typing the same answer again still colours the box.
+38. **Decluttered to what builds the forms.** The repo now holds only `build.py`, `build_all.py`, the engine files, `forms/`,
+    `requirements.txt` and the docs. `read_qr.py` (the Bank's QR reader), `benchmark/` (QR vs AI test), `tools/`
+    (`reader_test.py`, `lag_check.py`, `smartform/`) moved to `~/Documents/lc-form-extras` (not needed to build). `zxing-cpp`
+    left `requirements.txt` (only the QR reader used it). Pillow stays: pikepdf needs it. Forms and PDFs are unchanged.

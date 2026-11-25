@@ -2,9 +2,4 @@
 __pycache__/
 out/
 .DS_Store
-benchmark/.env
-benchmark/work/
-benchmark/old/
-tools/smartform/anon.local.json
-tools/smartform/acrobat/.*.js
 dist/

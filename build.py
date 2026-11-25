@@ -11,7 +11,6 @@ THE FILES THAT BUILD A FORM (the engine files together in one folder, the form f
     acrobat_js.py   The JavaScript Acrobat runs inside the PDF (red boxes, Check form, QR codes). To stay quick it
                     re-checks only the questions that read the box you just left (an index pdf_writer.py builds from the
                     form file), once per change, and skips writing boxes whose look is unchanged.
-                    (python tools/lag_check.py times a field commit in Acrobat.)
 You only ever edit form files. The other four are the same for every form.
 
 WHAT A BUILD DOES
