@@ -6,16 +6,35 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 477 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and the rows of two QR codes (177 each).
 
-- Needs Python 3.9 or later and **one library to build, pikepdf** (plus the three packages it installs itself: lxml,
-  Pillow, packaging). All their licences are permissive (no GPL/AGPL). See [Libraries and licences](#libraries-and-licences).
-- **New to this? Read [GUIDE.md](GUIDE.md) first.** It shows, step by step, how to change the form and how to make a
-  similar one, without needing to know Python.
-- **A form file plus 4 engine files build the PDF:** the form (`forms/lc_form.py`, the only one you edit) and four
-  engine files that are the same for every form (`build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py`). One
-  command builds the PDF and checks it.
-- **Folders:** the engine files at the top and every form file in `forms/`. The QR reader, the QR vs AI benchmark and the smart-form tools were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
+## Libraries used
 
-## Run it
+These are everything `build.py` (one form) and `build_all.py` (all forms in one PDF with the main menu) need.
+Versions are pinned in `requirements.txt`; install with `python -m pip install -r requirements.txt`.
+
+| Library | Version | Licence | What it does here | Link |
+|---|---|---|---|---|
+| **pikepdf** (bundles the **qpdf** C++ library, Apache-2.0) | 10.18.1 | MPL-2.0 | **The main library.** Writes the whole PDF: each page's drawing (text, lines, boxes), the fields and how they look, buttons, page links, the Acrobat JavaScript, the stored form description. In `build_all.py` it also joins the forms into one PDF, turns each form's pages into hidden page templates and adds the main menu. | [pypi.org/project/pikepdf](https://pypi.org/project/pikepdf/) · [qpdf.sourceforge.io](https://qpdf.sourceforge.io/) |
+| lxml | 6.1.3 | BSD-3-Clause | Installed by pikepdf: pikepdf uses it to read and write the PDF's XML metadata. Not called by this project directly. | [pypi.org/project/lxml](https://pypi.org/project/lxml/) |
+| Pillow | 13.0.0 | MIT-CMU | Installed by pikepdf: pikepdf uses it for images inside PDFs. Not called by this project directly. | [pypi.org/project/pillow](https://pypi.org/project/pillow/) |
+| packaging | 26.3 | Apache-2.0 or BSD-2-Clause | Installed by pikepdf: pikepdf uses it to check library versions. Not called by this project directly. | [pypi.org/project/packaging](https://pypi.org/project/packaging/) |
+| Python standard library | Python 3.9+ | PSF | Dates, JSON (the stored form description), zlib compression of page drawings, loading the form files, file handling. | [docs.python.org](https://docs.python.org/3/library/) |
+
+Inside the finished PDF, no library is needed: the checks, the main menu and the QR code run as Adobe Acrobat
+JavaScript (`acrobat_js.py`, `build_all.py`) in the person's Acrobat or Acrobat Reader.
+
+All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
+your own code. MPL-2.0 only asks that changes to *pikepdf's own files* be shared, and this project doesn't change them.
+There's no QR library: the QR code is made inside the PDF, by `acrobat_js.py`, when the person presses Generate QR Code.
+
+**Why not PyMuPDF or pdf-lib?** Earlier versions used them. PyMuPDF is AGPL-3.0, a licence banks usually avoid, and its
+2.x release installs about a dozen extra AI packages (onnxruntime, numpy, ...). pdf-lib (JavaScript) is MIT but hasn't
+had a release since 2021, so security fixes won't come. pikepdf is permissive, actively maintained, and enough on
+its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `layout.py`).
+
+## Quick setup
+
+**New to this? Read [GUIDE.md](GUIDE.md) first.** It shows, step by step, how to change the form and how to make a
+similar one, without needing to know Python. The commands below are the short version.
 
 ```
 python3 -m venv .venv
@@ -25,6 +44,24 @@ python3 -m venv .venv
 ```
 
 On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`.
+
+**Use Acrobat or Reader to test the form.** The browser's PDF viewer (Chrome, Edge) shows and fills the form, but it
+doesn't run most of the Acrobat JavaScript. So in a browser you won't get the red boxes, locking, Check form or the
+QR code. Download the PDF and open it in Acrobat. If a yellow bar says JavaScript is disabled, choose Options >
+Enable JavaScript (or Preferences > JavaScript > Enable Acrobat JavaScript): with JavaScript off, nothing is checked,
+dates are plain drop-down lists, and Check form says "The form's checks did not start".
+
+## Detailed explanation
+
+Everything below is the full reference: how the project is organised, how the PDF is built, every rule and question,
+the JavaScript inside the PDF, the QR code, testing and history.
+
+### What builds the PDF
+
+- **A form file plus 4 engine files build the PDF:** the form (`forms/lc_form.py`, the only one you edit) and four
+  engine files that are the same for every form (`build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py`). One
+  command builds the PDF and checks it.
+- **Folders:** the engine files at the top and every form file in `forms/`. The QR reader, the QR vs AI benchmark and the smart-form tools were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
 
 The build checks twice and stops with the reason, saving nothing, if anything is wrong:
 - **before building**, it checks the form file for mistakes (a misspelt option, a rule that names a question that
@@ -38,13 +75,7 @@ silently don't work.
 **This README is written by hand.** The page and field counts, the starting answers and the table of every question
 below describe `lc_form.py`: when you change the form, update them here too.
 
-**Use Acrobat or Reader to test the form.** The browser's PDF viewer (Chrome, Edge) shows and fills the form, but it
-doesn't run most of the Acrobat JavaScript. So in a browser you won't get the red boxes, locking, Check form or the
-QR code. Download the PDF and open it in Acrobat. If a yellow bar says JavaScript is disabled, choose Options >
-Enable JavaScript (or Preferences > JavaScript > Enable Acrobat JavaScript): with JavaScript off, nothing is checked,
-dates are plain drop-down lists, and Check form says "The form's checks did not start".
-
-## Architecture
+### Architecture
 
 ```
                  ┌──────────────────────────────────────────────────────────────┐
@@ -86,7 +117,7 @@ form, split into one file per step so each stays readable. The JavaScript is kep
 and if a file is cut short Python refuses to run instead of producing a broken form. One folder, `forms/`, for the
 form files: `python build.py lc_form.py` looks there, and says so if the file isn't found.
 
-## Files
+### Files
 
 | File | Purpose | Who opens it |
 |---|---|---|
@@ -122,32 +153,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | What the QR code holds | `lcPayload` in `acrobat_js.py` |
 | What a button says or does | its entry in `BUTTON_JS` in `acrobat_js.py` |
 
-## Libraries and licences
-
-These are everything `build.py` (one form) and `build_all.py` (all forms in one PDF with the main menu) need.
-Versions are pinned in `requirements.txt`; install with `python -m pip install -r requirements.txt`.
-
-| Library | Version | Licence | What it does here | Link |
-|---|---|---|---|---|
-| **pikepdf** (bundles the **qpdf** C++ library, Apache-2.0) | 10.18.1 | MPL-2.0 | **The main library.** Writes the whole PDF: each page's drawing (text, lines, boxes), the fields and how they look, buttons, page links, the Acrobat JavaScript, the stored form description. In `build_all.py` it also joins the forms into one PDF, turns each form's pages into hidden page templates and adds the main menu. | [pypi.org/project/pikepdf](https://pypi.org/project/pikepdf/) · [qpdf.sourceforge.io](https://qpdf.sourceforge.io/) |
-| lxml | 6.1.3 | BSD-3-Clause | Installed by pikepdf: pikepdf uses it to read and write the PDF's XML metadata. Not called by this project directly. | [pypi.org/project/lxml](https://pypi.org/project/lxml/) |
-| Pillow | 13.0.0 | MIT-CMU | Installed by pikepdf: pikepdf uses it for images inside PDFs. Not called by this project directly. | [pypi.org/project/pillow](https://pypi.org/project/pillow/) |
-| packaging | 26.3 | Apache-2.0 or BSD-2-Clause | Installed by pikepdf: pikepdf uses it to check library versions. Not called by this project directly. | [pypi.org/project/packaging](https://pypi.org/project/packaging/) |
-| Python standard library | Python 3.9+ | PSF | Dates, JSON (the stored form description), zlib compression of page drawings, loading the form files, file handling. | [docs.python.org](https://docs.python.org/3/library/) |
-
-Inside the finished PDF, no library is needed: the checks, the main menu and the QR code run as Adobe Acrobat
-JavaScript (`acrobat_js.py`, `build_all.py`) in the person's Acrobat or Acrobat Reader.
-
-All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
-your own code. MPL-2.0 only asks that changes to *pikepdf's own files* be shared, and this project doesn't change them.
-There's no QR library: the QR code is made inside the PDF, by `acrobat_js.py`, when the person presses Generate QR Code.
-
-**Why not PyMuPDF or pdf-lib?** Earlier versions used them. PyMuPDF is AGPL-3.0, a licence banks usually avoid, and its
-2.x release installs about a dozen extra AI packages (onnxruntime, numpy, ...). pdf-lib (JavaScript) is MIT but hasn't
-had a release since 2021, so security fixes won't come. pikepdf is permissive, actively maintained, and enough on
-its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `layout.py`).
-
-## Security
+### Security
 
 - **What's installed:** 4 packages, about 54 MB, pinned to exact versions in `requirements.txt`. Prebuilt Python
   packages (wheels) don't run code when installed.
@@ -163,7 +169,7 @@ its own: the page drawing is a few PDF commands (`text`, `line` and `rect` in `l
   `requirements.txt` by hand (keep its comments) and run `.venv/bin/pip install -r requirements.txt`. Then rebuild
   (it checks itself), and test in Acrobat.
 
-## How the PDF is built
+### How the PDF is built
 
 `python build.py lc_form.py` reads the form from `lc_form.py`, checks it for mistakes, runs three steps, then checks the result:
 
@@ -191,9 +197,9 @@ that page, so the form doesn't end with a blank gap.
 The build is **reproducible**: the same form file on the same day gives a byte-for-byte identical PDF. (The date
 drop-downs list the dates from a year back to two years ahead, so they change with the build date.)
 
-## Rules, conditions and validations
+### Rules, conditions and validations
 
-### Rules that apply to every question
+#### Rules that apply to every question
 
 | Rule | Where it's enforced |
 |---|---|
@@ -205,7 +211,7 @@ drop-downs list the dates from a year back to two years ahead, so they change wi
 | **Allowed characters**: `A-Z a-z 0-9 space . , - / ( ) ' : ? + # & @ %` and line breaks. Anything else is refused as you type, and listed if pasted ("remove ...") | keystroke script, and `lcRules` |
 | **Dates** are DD/MM/YYYY and must be real dates | Acrobat's date format plus `lcRules`. With JavaScript off, a drop-down of real dates from a year back to two years ahead (the range depends on the build date). |
 
-### Formats
+#### Formats
 
 | Format | Keys allowed while typing | A whole answer must look like | Message |
 |---|---|---|---|
@@ -220,7 +226,7 @@ drop-downs list the dates from a year back to two years ahead, so they change wi
 
 A wrong whole answer gets an alert when you leave the box, and the box refuses it.
 
-### Checks across answers
+#### Checks across answers
 
 A form file can add its own checks in `FORM["checks"]` (helpers in `build.py`): `not_before` / `after` (one date not
 before / strictly after another), `in_range` (a number between two values) and `account_length` (an account number's
@@ -237,7 +243,7 @@ The LC form's own checks:
 | Amount must be more than zero | 8.2 |
 | "For FOB/CFR/FCA/CPT" insurance (14.15) must not be filled in when price basis is CIF or CIP (the beneficiary insures) | 14.15 |
 
-### Defaults when the form opens
+#### Defaults when the form opens
 
 - 2.1 Mode of advising: **Full Swift**
 - 11.2 Presentation period (days after shipment): **21**
@@ -246,7 +252,7 @@ The LC form's own checks:
 - 17.5 Please provide us with post-shipment financing under Docu...: **ticked**
 - 17.11 Please debit all DC issuance charges to our account with you: **ticked**
 
-### Every question
+#### Every question
 
 "Mandatory" says **always**, **when** a condition holds, or **no**. A question with a "when" condition is also locked
 until that condition holds, except for 10.4 and 10.7, which are never locked. "Unlocked when" means the question only
@@ -450,7 +456,7 @@ applies then, but stays optional.
 |---|---|---|---|---|---|---|
 | 18.1 | `authorised_person` | Name and title of authorised person(s) | text | no |  |  |
 
-## The JavaScript inside the PDF
+### The JavaScript inside the PDF
 
 Everything is stored in one document-level script, named `lcRules`, built from `DOCUMENT_JS` in `acrobat_js.py`. It defines these
 functions:
@@ -495,7 +501,7 @@ The buttons (`BUTTON_JS` in `acrobat_js.py`):
 With JavaScript off, none of this runs. The form still fills, the date lists and page links work, and the mandatory
 boxes keep their red outline. Nothing is checked, though.
 
-## How the QR code is made
+### How the QR code is made
 
 The code is made **inside the PDF, in Acrobat**, when the person presses Generate QR Code. It isn't made by Python,
 and no QR library is used.
@@ -551,11 +557,11 @@ Each code is 110 mm square: 177 × 177 squares of 0.6 mm.
 
 The bank scans the printed code (or both codes) with a QR reader and gets the JSON.
 
-## Reading the QR codes
+### Reading the QR codes
 
 The QR reader (the Bank's side) and its tests were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
 
-## Testing in Acrobat
+### Testing in Acrobat
 
 Every build checks the PDF's structure itself: every question's fields, the required flags, limits, starting
 answers, the rules table, scripts, buttons and QR rows. The scripts themselves only run inside Acrobat, so after changing a rule
@@ -570,7 +576,7 @@ or a script, also test the PDF in Acrobat:
    appear, labelled 1 of 2 and 2 of 2. Scan both; together they give the JSON. Shorten the text and generate again:
    back to one code, and the second frame disappears. Test the two codes with the Bank's own scanner too.
 
-## Changing the form, and making a new one
+### Changing the form, and making a new one
 
 See **[GUIDE.md](GUIDE.md)**: it covers both step by step, with a table of common changes.
 
@@ -584,7 +590,7 @@ system team about new or renamed ids (they read the QR code's answers by id).
 Note: `half=True` / `half=False` on a question is kept in the PDF's copy of the form but has no effect on the
 layout: box widths are worked out from the label and `max`.
 
-## Where this came from
+### Where this came from
 
 1. **Extracted from `pdf-template-studio`.** The builder is that repo's `pdfbuild/build_form.py`, cut down to this one
    form and the JavaScript version only: about 1,040 lines down to 880. The red frames used by the no-JavaScript
