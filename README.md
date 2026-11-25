@@ -6,7 +6,8 @@ It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It
 - 4 pages: 3 pages of questions, plus the QR code page.
 - 477 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and the rows of two QR codes (177 each).
 
-- Needs Python 3.9 or later and **one library to build, pikepdf**. All its licences are permissive (no GPL/AGPL).
+- Needs Python 3.9 or later and **one library to build, pikepdf** (plus the three packages it installs itself: lxml,
+  Pillow, packaging). All their licences are permissive (no GPL/AGPL). See [Libraries and licences](#libraries-and-licences).
 - **New to this? Read [GUIDE.md](GUIDE.md) first.** It shows, step by step, how to change the form and how to make a
   similar one, without needing to know Python.
 - **A form file plus 4 engine files build the PDF:** the form (`forms/lc_form.py`, the only one you edit) and four
@@ -123,13 +124,19 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 
 ## Libraries and licences
 
-| Package | Licence | Used for |
-|---|---|---|
-| **pikepdf** (bundles the qpdf C++ library, Apache-2.0) | MPL-2.0 | Everything: writes each page's drawing (text, lines, boxes), the fields and how they look, buttons, page links, the scripts and the stored form description |
-| lxml (needed by pikepdf) | BSD-3-Clause | Not used by this project directly |
-| Pillow (needed by pikepdf) | MIT-CMU | Not used by this project directly |
-| packaging (needed by pikepdf) | Apache-2.0 or BSD-2-Clause | Not used by this project directly |
-| Python standard library | PSF | Dates, JSON, compression, file handling, and `http.server` for local hosting |
+These are everything `build.py` (one form) and `build_all.py` (all forms in one PDF with the main menu) need.
+Versions are pinned in `requirements.txt`; install with `python -m pip install -r requirements.txt`.
+
+| Library | Version | Licence | What it does here | Link |
+|---|---|---|---|---|
+| **pikepdf** (bundles the **qpdf** C++ library, Apache-2.0) | 10.18.1 | MPL-2.0 | **The main library.** Writes the whole PDF: each page's drawing (text, lines, boxes), the fields and how they look, buttons, page links, the Acrobat JavaScript, the stored form description. In `build_all.py` it also joins the forms into one PDF, turns each form's pages into hidden page templates and adds the main menu. | [pypi.org/project/pikepdf](https://pypi.org/project/pikepdf/) · [qpdf.sourceforge.io](https://qpdf.sourceforge.io/) |
+| lxml | 6.1.3 | BSD-3-Clause | Installed by pikepdf: pikepdf uses it to read and write the PDF's XML metadata. Not called by this project directly. | [pypi.org/project/lxml](https://pypi.org/project/lxml/) |
+| Pillow | 13.0.0 | MIT-CMU | Installed by pikepdf: pikepdf uses it for images inside PDFs. Not called by this project directly. | [pypi.org/project/pillow](https://pypi.org/project/pillow/) |
+| packaging | 26.3 | Apache-2.0 or BSD-2-Clause | Installed by pikepdf: pikepdf uses it to check library versions. Not called by this project directly. | [pypi.org/project/packaging](https://pypi.org/project/packaging/) |
+| Python standard library | Python 3.9+ | PSF | Dates, JSON (the stored form description), zlib compression of page drawings, loading the form files, file handling. | [docs.python.org](https://docs.python.org/3/library/) |
+
+Inside the finished PDF, no library is needed: the checks, the main menu and the QR code run as Adobe Acrobat
+JavaScript (`acrobat_js.py`, `build_all.py`) in the person's Acrobat or Acrobat Reader.
 
 All of these are permissive licences: they allow commercial and internal use, and they don't require you to publish
 your own code. MPL-2.0 only asks that changes to *pikepdf's own files* be shared, and this project doesn't change them.
