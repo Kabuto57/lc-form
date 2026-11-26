@@ -6,7 +6,7 @@ Builds each form file (the same way as build.py), then joins them into one PDF:
   - the main menu page (Import / Export / Loans / Guarantees) with a tick box for the Bank's terms (TERMS_TEXT).
     Click a form's name to open it; if the box is not ticked an alert asks the user to tick it first.
   - each form, as built on its own (questions, rules, Check form / Reset form, QR code page), plus a
-    "Main menu" button on every page.
+    "Main menu" button on every page (except the extra QR code pages, which have no buttons).
   - bookmarks for every form.
 The menu is the ordinary page 0 and always stays; every form's pages are hidden page templates ("LC_0", "LC_1" ...), and so is
 each form's extra QR code page ("LC_qrx"; Generate QR Code spawns it after the form's QR code page for codes 3 to 16, two per
