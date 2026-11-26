@@ -597,7 +597,9 @@ before-save warning, and decodes every code that was drawn with zxing-cpp. For p
 15,300 characters it checks that 1 / 2 / 4 / 7 codes come out; each code's structured-append index, total and parity are
 right (read straight from the code's modules); the codes joined in order equal the payload byte for byte; nothing is
 shortened; the printed range ends at the last code's page; shrinking back leaves no stale code, frame or label on any page
-(also when `deletePages` is refused); a blanked code or changed answer stops Print Form; and beyond 16 codes only the long
+(also when `deletePages` is refused); a blanked code or changed answer stops Print Form; when the viewer refuses to add a
+page (also with 2 codes already drawn, and with `deletePages` refused too) Generate says so, Print Form prints nothing and
+the form alone warns before saving; and beyond 16 codes only the long
 paragraphs are shortened and listed in `"truncated"`. The stand-in cannot say how Acrobat or Reader behave: the new pages'
 field names (run in three naming styles) and `deletePages` allowed or refused are assumptions, so also run the steps below
 in Acrobat.

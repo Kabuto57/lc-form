@@ -87,6 +87,7 @@ global.app = {viewerType: "Reader", viewerVersion: "0", alert(m, i) { alerts.pus
 global["lcRules" + SFX] = function () { const a = []; a.bad = []; a.first = ""; return a; };   // the rules engine is not under test here
 const press = (name) => { alerts.length = 0; printed.length = 0; global["lcWarnedAt"] = 0; new Function(D.buttons[name]).call(doc); return {alerts: alerts.slice(), printed: printed.slice()}; };
 const get = (n) => doc.getField(P + n);
+const qc = (text) => { try { return global["lcQrCheck" + SFX](doc, text); } catch (e) { return "THREW " + e; } };   // before-save swallows a throw: no warning
 const state = (label, text) => {
   const rows = {};
   for (const f of fields) {
@@ -96,7 +97,7 @@ const state = (label, text) => {
   }
   const own = f => f.pg !== tmpl && f.name.indexOf("__qr") >= 0;
   return {label: label, numPages: pages.length, rows: rows,
-          check: global["lcQrCheck" + SFX] ? global["lcQrCheck" + SFX](doc, text) : "",
+          check: global["lcQrCheck" + SFX] ? qc(text) : "",
           last: global["lcLastPage" + SFX] ? global["lcLastPage" + SFX](doc, text) : get("__qr").page, qrPage: get("__qr").page,
           labels: fields.filter(f => /_label$/.test(f.name) && own(f) && f.value !== "").map(f => [f.name, f.value]),
           frames: fields.filter(f => /_frame$/.test(f.name) && own(f)).map(f => [f.name, f.display])};
@@ -121,7 +122,7 @@ for (const step of JSON.parse(fs.readFileSync(process.argv[5], "utf8"))) {
         const hit = fields.filter(f => f.name.endsWith(c.field) && f.pg !== tmpl && (c.fill ? f.value === "" : true)).map(f => [f, f.value]);
         if (!hit.length) throw new Error("tamper " + c.field + ": no such slot to change");
         for (const [f] of hit) f.value = c.fill ? "n" : "";
-        s.tamper[(c.fill ? "fill " : "blank ") + c.field] = {check: global["lcQrCheck" + SFX](doc, text), print: press("print-form"), save: press("before-save")};
+        s.tamper[(c.fill ? "fill " : "blank ") + c.field] = {check: qc(text), print: press("print-form"), save: press("before-save")};
         for (const [f, v] of hit) f.value = v;
       }
       const k = step.stale, was = get(k).value;
@@ -274,6 +275,8 @@ def check_step(st, want, info, block):
         generated = " ".join(st["generate"]["alerts"]) if st["generate"] else ""
         if "could not be generated" not in generated:
             notes.append(f"Generate QR Code did not report the failure: {generated[:90]!r}")
+        if st["check"].startswith("THREW"):
+            notes.append(f"the check Print Form and saving use threw: {st['check'][:90]}")
         if not st["check"] or st["print"]["printed"] or not any("do not match" in a for a in st["print"]["alerts"]):
             notes.append(f"Print Form was not stopped: {st['print']}")
         if info["prefix"] == "" and not any("not complete" in a for a in st["save"]["alerts"]):
@@ -328,6 +331,8 @@ def check_step(st, want, info, block):
         if st["save"]["alerts"]:
             notes.append(f"before-save warned: {st['save']['alerts']}")
         for field, t in (st.get("tamper") or {}).items():   # a blanked code must be noticed by the check, Print Form and saving
+            if t["check"].startswith("THREW"):
+                notes.append(f"changing {field}: the check threw: {t['check'][:90]}")
             if not t["check"] or t["print"]["printed"] or not any("do not match" in a for a in t["print"]["alerts"]):
                 notes.append(f"changing {field} was not stopped by Print Form: {t['print']}")
             if not joined_pdf and not any("not complete" in a for a in t["save"]["alerts"]):
@@ -395,6 +400,17 @@ def main():
         step("recovers: 7 codes", answers(6500, 6500, others=len(texts)), expect=7, tamper=left_extra),
         {"label": "reset", "set": {}, "reset": True, "expect": 0},
     ]
+    # failed spawns starting from 2 codes drawn and no extra page: slots 1 and 2 still hold codes, so only the missing-page
+    # guard of the check stops a stale 2-code page printing. Its own run, so it is also done with deletePages refused.
+    from_two = [
+        step("3000: 2 codes", answers(1400, 1400), expect=2),
+        step("2 codes -> 9000, no page added", answers(4400, 4400), fail=True, failAfter=0),
+        step("back to 3000: 2 codes", answers(1400, 1400), expect=2),
+        step("2 codes -> 15300, 1 page added", answers(6500, 6500, others=len(texts)), fail=True, failAfter=1),
+        step("recovers: 7 codes", answers(6500, 6500, others=len(texts)), expect=7),
+        step("back to 2000", answers(900, 900), expect=1),
+        {"label": "reset", "set": {}, "reset": True, "expect": 0},
+    ]
     failures = checked = 0
     for what, info in (("one form", standalone), ("joined PDF", joined)):
         if info is None:
@@ -404,12 +420,13 @@ def main():
             for block in (False, True):
                 # (with deletePages refused, the pages of the 16-code step are still there, so no spawn is needed and none can fail)
                 todo = [x for x in steps if not (block and x.get("fail"))]
-                for st, want in zip(run(info, todo, style, block), todo):
-                    notes = check_step(st, want, info, block)
-                    checked += 1
-                    failures += bool(notes)
-                    print(("FAIL " if notes else "PASS ") + f"[{what}, rename {style}, deletePages {'blocked' if block else 'allowed'}] {want['label']:30} codes={st['n']:2} pages={st['numPages']}"
-                          + ("  " + "; ".join(notes) if notes else ""))
+                for seq in (todo, from_two):
+                    for st, want in zip(run(info, seq, style, block), seq):
+                        notes = check_step(st, want, info, block)
+                        checked += 1
+                        failures += bool(notes)
+                        print(("FAIL " if notes else "PASS ") + f"[{what}, rename {style}, deletePages {'blocked' if block else 'allowed'}] {want['label']:30} codes={st['n']:2} pages={st['numPages']}"
+                              + ("  " + "; ".join(notes) if notes else ""))
     # every one of the 13 forms inside the joined PDF: 1 code, 3 codes, back to 1, reset, with and without deletePages
     if joined is not None:
         for file, code in [f for _, forms in build_all.MENU for f in forms]:
