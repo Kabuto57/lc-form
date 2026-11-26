@@ -633,7 +633,7 @@ def decode_check(spec, parts, answer_sets, form=None, minimum_codes=1):
                         for dy in range(scale):
                             for dx in range(scale):
                                 px[(x + quiet) * scale + dx, (y + quiet) * scale + dy] = 0
-            found = zxingcpp.read_barcodes(img)
+            found = zxingcpp.read_barcodes(img, formats=zxingcpp.BarcodeFormat.QRCode)
             if len(found) != 1:
                 fail(f"decode case {n}: zxing-cpp read {len(found)} codes from one drawn code")
             text += found[0].text
