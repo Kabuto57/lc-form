@@ -58,23 +58,27 @@ def build_pdf(form):
 
 
 def pdf_parts(pdf_bytes):
-    """(document script, Generate QR Code button script, {field name: mock type}) of a built PDF."""
+    """(document script, Generate QR Code script, {field name: mock type}, Print Form script) of a built PDF."""
     pdf = pikepdf.open(__import__("io").BytesIO(pdf_bytes))
     doc_js = zlib.decompress(pdf.Root.Names.JavaScript.Names[1].JS.read_raw_bytes()).decode("latin-1")
-    types, button = {}, None
+    types, button, printer = {}, None, None
     for f in pdf.Root.AcroForm.Fields:
         name, ft, ff = str(f.T), str(f.get("/FT", "")), int(f.get("/Ff", 0))
         types[name] = {"/Tx": "text", "/Ch": "combobox"}.get(ft) or ("button" if ff & 65536 else "radiobutton" if ff & 32768 else "checkbox")
-        if name == "__generate_qr":
+        if name in ("__generate_qr", "__print_form"):
             js = f.Kids[0].A.JS if "/Kids" in f else f.A.JS
-            button = js.read_bytes().decode("latin-1") if isinstance(js, pikepdf.Stream) else str(js)
-    return doc_js, button, types
+            js = js.read_bytes().decode("latin-1") if isinstance(js, pikepdf.Stream) else str(js)
+            if name == "__generate_qr":
+                button = js
+            else:
+                printer = js
+    return doc_js, button, types, printer
 
 
 def run_node(mode, parts, cases):
-    doc_js, button, types = parts
+    doc_js, button, types, printer = parts
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as t:
-        json.dump({"mode": mode, "script": doc_js, "button": button, "types": types, "cases": cases}, t)
+        json.dump({"mode": mode, "script": doc_js, "button": button, "printer": printer, "types": types, "cases": cases}, t)
     try:
         r = subprocess.run(["node", os.path.join(HERE, "check_pipe_mock.js")], stdin=open(t.name), capture_output=True, text=True)
     finally:
@@ -464,6 +468,8 @@ def main():
         fail("the guard does not bite: a changed code (L5Y -> L5X) was not noticed")
     print("guard bites: with 1_06 allowed = L5X the records no longer match the old code's")
 
+    hostile_check(spec, parts, cases[0][0])
+    print_check(spec, parts, cases[0][0])
     if args.decode:
         # (the golden sample is not a complete application: Generate QR Code would refuse it. Generate QR Code first clears the
         # answers left in locked boxes, so those are left out here.)
@@ -472,6 +478,62 @@ def main():
         maxi = {k: v for k, v in random_answers(rng, spec.FORM, maxi=True)[0].items()}   # every optional box answered, texts at full length
         decode_check(spec, parts, clean[:12] + [clean[i] for i in sizes[:3]] + [maxi])
     print("PASS")
+
+
+DELIMITERS = ["AC|ME", "A[B", "A]B", "A{B", "A}B", "A{}B", "A\nB", "A\rB", "A\r\nB", "|", "[]", "A|B|C|D", "\n|[{\r}]"]
+
+
+def hostile_check(spec, parts, base):
+    """Values that reach the fields without the keystroke filter (FDF import, autofill, a pasted newline) must not change the
+    layout of the records: each record keeps its number of positions, and no record holds a raw newline."""
+    form = spec.FORM
+    counts = [len(r) for r in form["pipe"]]
+    on = {"doc_bill_of_lading": True, "bl_made_out_to": "other (specify)", "bl_freight": "Collect", "doc_air_waybill": True, "awb_freight": "Prepaid",
+          "doc_other": True, "doc_certificate_of_origin": True, "origin_originals": "1", "origin_copies": "1", "price_basis": "Others",
+          "shipment_from": "Dispatch from", "shipment_to": "Place of Delivery", "drafts_at": "Term", "doc_delivery_order": True,
+          "do_originals": "1", "do_copies": "1", "do_countersigned_by": "One", "do_signature_verified": "need"}
+    targets = ["applicant_name", "beneficiary_name", "third_party_name", "advising_bank_name", "applicant_address_1", "beneficiary_address_2",
+               "beneficiary_address_3", "third_party_address_1", "advising_bank_address_2", "shipment_from_place", "shipment_from_place_2",
+               "shipment_to_place", "shipment_to_place_2", "price_basis_other", "term_after", "bl_made_out_to_other", "bl_notify_party",
+               "awb_notify_party", "origin_country", "other_documents_1", "other_documents_2", "goods_description", "additional_conditions",
+               "currency", "term_days", "tolerance_plus", "presentation_days"]
+    cases, labels = [], []
+    for t in targets:
+        for d in DELIMITERS:
+            cases.append(dict(base, **on, **{t: d}))
+            labels.append((t, d))
+    out = run_node("records", parts, [field_values(form, a) for a in cases])
+    bad = []
+    for (t, d), recs in zip(labels, out):
+        for n, (r, want) in enumerate(zip(recs, counts), 1):
+            if r.count("|") != want or "\n" in r or "\r" in r:
+                bad.append(f"{t} = {d!r}: record {n} has {r.count('|')} positions (want {want})" + (", a raw newline" if "\n" in r or "\r" in r else ""))
+        if len(recs) != 4:
+            bad.append(f"{t} = {d!r}: {len(recs)} records")
+    if bad:
+        print(f"  {len(bad)} of {len(cases)} hostile answers break the records, e.g.:")
+        for b in bad[:8]:
+            print("   ", b)
+        fail("delimiters or newlines in an answer change the layout of the records")
+    print(f"hostile answers: {len(cases)} (each of {len(DELIMITERS)} delimiter / newline values in {len(targets)} boxes) keep every record at {counts} positions with no raw newline")
+
+
+def print_check(spec, parts, base):
+    """Print Form must accept the stored QR text however Acrobat stores newlines in the single-line hidden field, and refuse a changed answer."""
+    form = spec.FORM
+    text = "\n".join(run_node("records", parts, [field_values(form, base)])[0])
+    stored = [text, text.replace("\n", ""), text.replace("\n", "\r"), text.replace("\n", "\r\n"), text.replace("\n", " ")[:0] + text.replace("\n", "")]
+    cases = [dict(field_values(form, base), __qr=s) for s in stored]
+    changed = dict(base, applicant_name=base["applicant_name"] + "X")
+    cases.append(dict(field_values(form, changed), __qr=text))
+    cases.append(dict(field_values(form, base), __qr=""))
+    res = run_node("print", parts, cases)
+    for s, r in zip(["as set", "newlines removed", "CR", "CRLF", "newlines removed (again)"], res):
+        if not r["printed"]:
+            fail(f"Print Form refused the stored QR text ({s}): {r['alerts']}")
+    if res[5]["printed"] or res[6]["printed"]:
+        fail("Print Form printed although the answers changed or no QR code exists: the check does not bite")
+    print("Print Form: accepts the stored QR text with newlines kept, removed, CR or CRLF; refuses a changed answer and an empty code")
 
 
 def coverage(form, cases):

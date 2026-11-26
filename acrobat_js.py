@@ -432,8 +432,20 @@ PIPE_JS = r"""
 // blank), "chop": true (wrap in lines, see lcPipeChop). Every position ends with "|".
 var lcPipe = __PIPE__;
 // The answers by question id: text as typed (not trimmed), a tick box "true" (absent when not ticked), "tick any" a list.
+// The records' own characters | [ ] { } and line breaks must never come from an answer (the keystroke filter refuses them, but a
+// value set by FDF import, autofill or a pasted newline skips it): they become a space. Only the paragraph boxes (the entries
+// with "chop" on one answer) keep Enter, which the records write as {}: any line break there is one Enter (CR).
+var lcPipeLong = null;
 function lcPipeAnswers(d) {
-var G = {__GROUPS__}, A = {}, i, n, f, g, v;
+var G = {__GROUPS__}, A = {}, i, j, n, f, g, v, e;
+if (!lcPipeLong) {
+  lcPipeLong = {};
+  for (i = 0; i < lcPipe.length; i++) for (j = 0; j < lcPipe[i].length; j++) {
+    e = lcPipe[i][j]; if (!e.chop) continue;
+    if (e.id) lcPipeLong[e.id] = 1;
+    for (g = 0; e.join && g < e.join.length; g++) lcPipeLong[e.join[g]] = 1;
+  }
+}
 for (i = 0; i < d.numFields; i++) {
   n = d.getNthFieldName(i); if (/^__/.test(n) || /__list$/.test(n)) continue;
   f = d.getField(n); if (!f || f.type == "button" || f.type == "signature") continue;
@@ -441,6 +453,7 @@ for (i = 0; i < d.numFields; i++) {
   if (g && G[g[1]]) { if (f.value != "Off") { if (!A[g[1]]) A[g[1]] = []; A[g[1]].push(G[g[1]][+g[2]]); } continue; }
   if (f.type == "checkbox") { if (f.value != "Off") A[n] = "true"; continue; }
   v = f.type == "radiobutton" ? (f.value == "Off" ? "" : String(f.value)) : String(f.valueAsString);
+  v = lcPipeLong[n] ? v.replace(/\r\n|\n/g, "\r").replace(/[|\[\]{}]/g, " ") : v.replace(/[|\[\]{}\r\n]/g, " ");
   if (v !== "") A[n] = v;
 }
 return A;
@@ -622,7 +635,7 @@ else { try { var q = this.getField("__qr"), x = lcPipeText(this); q.value = x; v
     "print-form-pipe": r"""
 // "PRINT FORM" BUTTON (pipe-format form): prints only once the QR code exists and still carries the current answers.
 var q = this.getField("__qr"), now = typeof lcPipeText == "function" ? lcPipeText(this) : "", same = false;
-try { same = String(q.value).replace(/\r\n?/g, "\n") == now; } catch (e) {}
+try { same = String(q.value).replace(/[\r\n]/g, "") == now.replace(/[\r\n]/g, ""); } catch (e) {}   // the hidden box may keep, change or drop the newlines between records; the records hold none
 if (!/\S/.test(q.value)) app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
 else if (!same) app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
 else this.print(true, 0, this.numPages - 1, false, true);

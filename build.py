@@ -181,10 +181,14 @@ def check_pipe(form, questions, stop):
             for qid in pipe_ids(entry):
                 if qid not in questions:
                     stop(f'{where} names "{qid}", but no question has that id.')
-            options = questions[entry["id"]][0].get("options") if "id" in entry else None
+            if entry.get("codes") and "id" not in entry:
+                stop(f'{where}: "codes" needs an "id" (the question whose answers become codes).')
+            question = questions[entry["id"]][0] if "id" in entry else None
+            options = (["true"] if question["kind"] == "check" else question.get("options") or []) if question else []
             for answer in entry.get("codes", {}):
-                if options and answer not in options:
-                    stop(f'{where}: "{answer}" is not one of the options of "{entry["id"]}" ({" / ".join(options)}).')
+                if answer not in options:
+                    stop(f'{where}: "{answer}" is not one of the answers of "{entry["id"]}" ' +
+                         (f'({" / ".join(options)}).' if options else "(a question without options has none to map to codes; remove \"codes\")."))
 
 
 # ---- check_form: explains mistakes in a form file before anything is built -------------------------------------

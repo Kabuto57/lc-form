@@ -637,6 +637,14 @@ fit (one code); when longer, `lcDrawQr` splits the text in half into two codes (
 them gets the second half in the second code (the split can fall inside a record). The QR page's explanatory text still says
 "as JSON": it belongs to the QR page, which this form does not change.
 
+**Answers cannot change the layout of the records.** The keystroke filter refuses `| [ ] { }`, but a value set by FDF import,
+autofill or a pasted newline skips it, so `lcPipeAnswers` turns each of those characters, and any line break, into a space before
+the records are built (in the paragraph boxes, goods description, additional conditions and other documents, only `| [ ] { }` become a
+space, and any line break counts as one Enter, written `{}`). Valid answers are unchanged (the oracle still matches byte for byte).
+Print Form compares the stored QR text and the current records with all CR/LF removed, because the hidden box is single-line and
+Acrobat may keep, change or drop the newlines between records. `check_pipe.py` tries every such character in 27 boxes
+and Print Form with each way of storing the newlines.
+
 **What the old format does not carry** (30 of the 108 questions, so they are not in the QR code, as in the old form's barcode; the
 printed PDF has them): application date; contact name / tel / fax; DC no, bank code; back-to-back (3); the "Drafts for the percentage"
 tick and the percentage; prepay choice; insurance arrangement and open cover no / with; beneficiary contact / tel / fax; the bank
@@ -967,3 +975,7 @@ layout: box widths are worked out from the label and `max`.
     byte-identical to the old code on the golden sample and 300 random valid answer sets, and the QR codes decode back to the
     records. Every other form's PDF is byte-identical to before (built with `PYTHONHASHSEED=0`: three forms' PDFs differ
     by one byte between two builds without it, as before this change). See "The pipe-format form".
+40. **Pipe form: hostile values and Print Form.** Delimiters (`| [ ] { }`) and line breaks in an answer no longer change the
+    records' layout (`lcPipeAnswers`), Print Form no longer depends on how Acrobat stores the newlines between records, and
+    `build.py` refuses `"codes"` on a question without options (a tick box accepts only the key `true`). `check_pipe.py` has the
+    hostile and Print Form checks.
