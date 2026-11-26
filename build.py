@@ -14,6 +14,8 @@ THE FILES THAT BUILD A FORM (the engine files together in one folder, the form f
                     form file), once per change, and skips writing boxes whose look is unchanged.
 You only ever edit form files. The other four are the same for every form.
     proof_multiqr.py  Not part of the build: after changing the QR code scripts, run it to prove 1 to 16 codes decode (README).
+    forms/lc_pipe_form.py is the LC form again with the old smart form's pipe-delimited text in the QR code (FORM["qrFormat"] = "pipe"
+                    and FORM["pipe"], the position table; IN_MENU = False keeps it out of build_all.py). check_pipe.py tests it.
 
 WHAT A BUILD DOES
     1. Reads the form file and checks it for mistakes (a misspelt option, a rule naming a question that doesn't
@@ -74,6 +76,8 @@ import sys
 #                                         "generate-qr" (Generate QR Code), "print-form" (Print Form).
 #                                         They do the same as the buttons every form already has (top right of every
 #                                         page, and on the QR code page), and show on screen only, not on paper.
+# Form settings besides the sections (FORM = {...}): "qrFormat": "pipe" with "pipe": [record, ...] puts the old smart form's pipe-delimited
+# records in the QR code instead of the JSON (see forms/lc_pipe_form.py). A form file may also say IN_MENU = False (build_all.py refuses to list it).
 # Leave width, new_page and cols out and layout.py decides (usually best). Colours and text sizes are the same on
 # every form (red = mandatory): they are set in layout.py, section 1.
 #
@@ -138,6 +142,51 @@ def account_length(field, currency, lengths, message):
     return {"t": "lengths", "a": field, "b": currency, "by": lengths, "m": message}
 
 
+# ---- the pipe-format QR text: FORM["qrFormat"] = "pipe" and FORM["pipe"] = [record, ...] (each record a list of position entries;
+# the entries are described in acrobat_js.py, PIPE_JS). Every question an entry names must exist, and the answers it maps
+# to codes must be options of that question.
+def pipe_ids(entry):
+    """Every question id an entry of the pipe table names."""
+    used = ([entry["id"]] if "id" in entry else []) + entry.get("lines", []) + entry.get("join", [])
+    if "if" in entry:
+        used.append(entry["if"][0])
+    if "tpl" in entry:
+        used.append(entry["tpl"]["when"])
+        for part in entry["tpl"]["parts"]:
+            texts = [part] if isinstance(part, str) else list(part[2].values()) if part[0] == "map" else [part[2], part[3]] if part[0] == "if" else []
+            used += [i for t in texts for i in re.findall(r"\{(\w+)\}", t)]
+            if not isinstance(part, str):
+                used.append(part[1])
+    if "qty" in entry:
+        q = entry["qty"]
+        used += [q["on"], q["o"], q["c"]] + ([q["tail"][0]] + re.findall(r"\{(\w+)\}", q["tail"][1]) if q.get("tail") else [])
+    return used
+
+
+def check_pipe(form, questions, stop):
+    if form.get("qrFormat") not in (None, "pipe"):
+        stop('FORM["qrFormat"] must be "pipe" (or left out for the usual JSON QR code).')
+    if form.get("qrFormat") != "pipe":
+        if "pipe" in form:
+            stop('FORM["pipe"] is only used with FORM["qrFormat"] = "pipe".')
+        return
+    if not form.get("pipe") or not all(isinstance(r, list) and r for r in form["pipe"]):
+        stop('FORM["pipe"] must be a list of records, each a list of position entries.')
+    for record in form["pipe"]:
+        for entry in record:
+            where = f'FORM["pipe"] position {entry.get("p", "?")}'
+            for key in entry:
+                if key not in ("p", "c", "id", "lines", "join", "tpl", "qty", "if", "d", "chop", "max", "as", "codes"):
+                    stop(f'{where} has an unknown setting "{key}".')
+            for qid in pipe_ids(entry):
+                if qid not in questions:
+                    stop(f'{where} names "{qid}", but no question has that id.')
+            options = questions[entry["id"]][0].get("options") if "id" in entry else None
+            for answer in entry.get("codes", {}):
+                if options and answer not in options:
+                    stop(f'{where}: "{answer}" is not one of the options of "{entry["id"]}" ({" / ".join(options)}).')
+
+
 # ---- check_form: explains mistakes in a form file before anything is built -------------------------------------
 KINDS = ("text", "long", "date", "radio", "checks", "check", "select")
 QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols", "words", "height"}
@@ -152,7 +201,7 @@ def check_form(form, defaults, formats):
         raise SystemExit("PROBLEM IN THE FORM FILE: " + message)
 
     for key in form:
-        if key not in ("title", "note", "issuer", "formCode", "sections", "checks"):
+        if key not in ("title", "note", "issuer", "formCode", "sections", "checks", "qrFormat", "pipe"):
             stop(f'FORM has an unknown setting "{key}".')
     for key in ("title", "sections"):
         if key not in form:
@@ -215,6 +264,7 @@ def check_form(form, defaults, formats):
         for key in ("a", "b"):
             if c.get(key) and c[key] not in questions:
                 stop(f'FORM["checks"]: a check refers to "{c[key]}", but no question has that id.')
+    check_pipe(form, questions, stop)
     for key, value in (defaults or {}).items():
         if key not in questions:
             stop(f'DEFAULTS gives an answer for "{key}", but no question has that id.')
@@ -265,6 +315,7 @@ def load_form(path):
     spec.DEFAULTS = getattr(spec, "DEFAULTS", {})
     spec.PDF_NAME = getattr(spec, "PDF_NAME", re.sub(r"\W+", "-", spec.FORM["title"]).strip("-") + ".pdf")
     spec.PAGES = getattr(spec, "PAGES", None)
+    spec.IN_MENU = getattr(spec, "IN_MENU", True)   # False: build_all.py's menu must not list this form (e.g. lc_pipe_form.py)
     return spec
 
 

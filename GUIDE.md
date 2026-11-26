@@ -9,6 +9,7 @@ lc-form/
     example_form.py   <- a small example. Copy it to start a new form.
     eblc_form.py, obc_form.py, bg_form.py ...   <- the other trade forms (12), redrawn from the old smart form.
                          Build any of them the same way:  python build.py bg_form.py
+  forms/lc_pipe_form.py <- the LC form again, but its QR code holds the old smart form's pipe-delimited text (Form LC-01P)
   build.py          <- RUN THIS:  python build.py lc_form.py
   build_all.py      <- or this, for every form in one PDF with a main menu:  python build_all.py
                        (tick the terms box, click a form on the menu and that form's pages open after the menu; Main menu asks, then clears the form and shows just the menu again; needs JavaScript on)
@@ -126,6 +127,16 @@ The kinds of question: `text` (one line), `long` (paragraph), `date`, `radio` (p
 
 Every form automatically gets the same features: red mandatory boxes, locking of questions that don't apply,
 Check form and Reset form buttons, and the QR code page (one code, or as many as the answers need, up to 16: the extra codes go on extra pages that appear only while needed).
+
+### The pipe-format LC form (`lc_pipe_form.py`)
+
+`python build.py lc_pipe_form.py` makes `out/LC-Application-Pipe.pdf`: the same questions and checks as the LC form (it uses
+`lc_form.py`, so change questions there), but Generate QR Code writes the **old smart form's barcode text** (4 records, fields
+separated by `|`, in fixed positions) instead of the JSON. It is not in the main-menu PDF. Which question goes in which position
+is the table `PIPE` in `forms/lc_pipe_form.py` (one line per position, 62 lines, named `1_01` ... `4_03` as in the old layout):
+to move a question or change a code, change its line. Questions the old format never carried (contact details, financing, the
+4th address line ...) are not in the QR code; the printed form still shows them. Test it against the old form's own code with
+`python check_pipe.py` (needs `node` and the smart-form extract; details in README.md, "The pipe-format form").
 
 ## 4. Read a filled-in form's QR code(s)
 

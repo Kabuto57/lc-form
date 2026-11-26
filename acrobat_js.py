@@ -411,6 +411,135 @@ function lcDrawQr(d, text) {
 }
 """[1:-1]
 
+# THE PIPE-FORMAT TEXT (only for a form file with FORM["qrFormat"] == "pipe", e.g. forms/lc_pipe_form.py). pdf_writer.py
+# appends this block to the document script of such a form and fills in __PIPE__ (the position table from the form file)
+# and __GROUPS__. Other forms do not get it, so their PDFs are unchanged. It replaces lcPayload for that form: the
+# "Generate QR Code" button (BUTTON_JS "generate-qr-pipe") puts lcPipeText(doc) into the ordinary QR code path (lcDrawQr)
+# instead of the JSON text. lcPipeText is the 4 records of the old smart form's barcode, one after the other, with a newline
+# between records. Nothing here touches the QR encoder or its drawing.
+PIPE_JS = r"""
+// THE PIPE-DELIMITED RECORDS (the old smart form's barcode text), built from the form file's position table.
+// lcPipe = [record 1 entries, record 2 entries, ...]. Each entry describes one position (the old "1_01" ... "4_03"):
+//   {"c": text}                         a fixed text
+//   {"id": q}                           the answer as typed; also "max": cut to this many characters, "as": "amount" or "date",
+//                                       "codes": {answer: code} (an answer not listed gives nothing)
+//   {"lines": [q, ...]}                 each non-blank answer in [ ]
+//   {"join": [q, ...]}                  the non-blank answers, one space between
+//   {"tpl": {"when": tick box, "parts": [...]}}   a sentence: text with {q} answers, ["map", q, {answer: text}],
+//                                       ["list", q, separator, [[option, text], ...]], ["if", q, text if answered, else text]
+//   {"qty": {"on", "o", "c", "head", "tail"}}      "head IN n ORIGINALS AND m COPIES<tail>."
+// Any entry may also have "if": [q, [answers]] (blank unless the answer is one of these), "d" (used when the result is
+// blank), "chop": true (wrap in lines, see lcPipeChop). Every position ends with "|".
+var lcPipe = __PIPE__;
+// The answers by question id: text as typed (not trimmed), a tick box "true" (absent when not ticked), "tick any" a list.
+function lcPipeAnswers(d) {
+var G = {__GROUPS__}, A = {}, i, n, f, g, v;
+for (i = 0; i < d.numFields; i++) {
+  n = d.getNthFieldName(i); if (/^__/.test(n) || /__list$/.test(n)) continue;
+  f = d.getField(n); if (!f || f.type == "button" || f.type == "signature") continue;
+  g = /^(.+)__(\d+)$/.exec(n);
+  if (g && G[g[1]]) { if (f.value != "Off") { if (!A[g[1]]) A[g[1]] = []; A[g[1]].push(G[g[1]][+g[2]]); } continue; }
+  if (f.type == "checkbox") { if (f.value != "Off") A[n] = "true"; continue; }
+  v = f.type == "radiobutton" ? (f.value == "Off" ? "" : String(f.value)) : String(f.valueAsString);
+  if (v !== "") A[n] = v;
+}
+return A;
+}
+// Long text in lines, as the old form wrote it: leading and trailing blanks and Enter dropped; up to 65 characters as is
+// (Enter becomes {}); longer: cut at spaces into lines padded with spaces to 65 characters, each followed by {} (a word longer
+// than 65 is cut at 65; with Enter, each paragraph is cut on its own). Returns "" for nothing.
+function lcPipeChop(s) {
+var MAX = 65;
+function trim(x) { return x.replace(/^\s+/, "").replace(/\s+$/, ""); }
+function lr(x) { return x.replace(/^\r+/, "").replace(/\r+$/, ""); }
+function cut(x) { var r = ""; while (x.length > 0) { if (x.length > MAX) { r += x.slice(0, MAX) + "{}"; x = x.slice(MAX); } else { r += x; x = ""; } } return r; }
+function words(x) {   // no Enter inside: fill lines word by word
+  var w = x.split(" "), fin = [], res = "", i, r = "";
+  for (i = 0; i < w.length; i++) if (w[i].length > MAX) w[i] = cut(w[i]);
+  for (i = 0; i < w.length; i++) {
+    if ((res + w[i]).length > MAX) {
+      if (w[i].length <= MAX) { i--; while (res.length < MAX) res += " "; fin.push(res + "{}"); res = ""; }
+      else { if (res !== "") { while (res.length < MAX) res += " "; res += "{}"; } fin.push(res + w[i] + " "); res = ""; }
+    } else res += w[i] + " ";
+  }
+  if (res !== "") fin.push(res);
+  for (i = 0; i < fin.length; i++) r += (i == fin.length - 1 && fin[i].slice(-1) == " ") ? fin[i].slice(0, fin[i].length - 1) : fin[i];
+  return r;
+}
+function paragraphs(x, byWords) {   // Enter inside: each paragraph on its own (byWords: the text has spaces; no trimming then)
+  var a = x.split("\r"), r = "", i;
+  for (i = 0; i < a.length; i++) {
+    if (byWords) { if (a[i].length > MAX) a[i] = words(a[i]); }
+    else a[i] = cut(trim(a[i]));
+    r += a[i] + (i < a.length - 1 ? "{}" : "");
+  }
+  return r;
+}
+if (s == null || s.length <= 0) return "";
+s = trim(lr(s)); if (s.length <= 0) return "";
+if (s.length <= MAX) return trim(s.replace(/\r/g, "{}"));
+if (s.indexOf(" ") <= 0) return s.indexOf("\r") <= 0 ? cut(s) : paragraphs(s, false);
+return s.indexOf("\r") <= 0 ? words(s) : paragraphs(s, true);
+}
+// One position's text.
+function lcPipeValue(e, A) {
+function a(id) { var x = A[id]; return typeof x == "string" ? x : ""; }
+function has(list, x) { for (var i = 0; i < list.length; i++) if (list[i] == x) return true; return false; }
+function fill(t) { return t.replace(/\{(\w+)\}/g, function (m, id) { return a(id); }); }
+var v = "", i, x, p, o, c, ph, tail, out, picks, q, m;
+if (!e["if"] || has(e["if"][1], a(e["if"][0]))) {
+  if (e.c != null) v = e.c;
+  else if (e.lines) { for (i = 0; i < e.lines.length; i++) if (a(e.lines[i]) !== "") v += "[" + a(e.lines[i]) + "]"; }
+  else if (e.join) { x = []; for (i = 0; i < e.join.length; i++) if (a(e.join[i]) !== "") x.push(a(e.join[i])); v = x.join(" "); }
+  else if (e.tpl) {
+    q = e.tpl; out = ""; if (a(q.when) == "true") for (i = 0; i < q.parts.length; i++) {
+      p = q.parts[i];
+      if (typeof p == "string") out += fill(p);
+      else if (p[0] == "map") out += fill(p[2].hasOwnProperty(a(p[1])) ? p[2][a(p[1])] : "");
+      else if (p[0] == "if") out += fill(a(p[1]) !== "" ? p[2] : p[3]);
+      else if (p[0] == "list") {   // ticked options in the table's order; none ticked: no sentence at all
+        picks = []; x = A[p[1]] || [];
+        for (m = 0; m < p[3].length; m++) if (has(x, p[3][m][0])) picks.push(p[3][m][1]);
+        if (!picks.length) { out = ""; break; }
+        out += picks.join(p[2]);
+      }
+    }
+    v = out;
+  }
+  else if (e.qty) {
+    q = e.qty; o = a(q.o); c = a(q.c);
+    if (a(q.on) == "true" && (o !== "" || c !== "")) {
+      tail = q.tail && a(q.tail[0]) !== "" ? fill(q.tail[1]) : "";
+      if (o == "0" && c == "0") ph = "";
+      else if (o === "" || o == "0") ph = " IN " + c + " " + (c == "1" ? "COPY" : "COPIES");
+      else if (c === "" || c == "0") ph = " IN " + o + " " + (o == "1" ? "ORIGINAL" : "ORIGINALS");
+      else ph = " IN " + o + " " + (o == "1" ? "ORIGINAL" : "ORIGINALS") + " AND " + c + " " + (c == "1" ? "COPY" : "COPIES");
+      if (ph !== "" || tail !== "") v = q.head + ph + tail + ".";
+    }
+  }
+  else if (e.id) {
+    v = a(e.id);
+    if (e.max != null) v = v.slice(0, e.max);
+    if (e.as == "amount") { v = v.replace(/,/g, ""); if (/^\d+$/.test(v)) v += ".00"; else if (/^\d+\.\d$/.test(v)) v += "0"; }
+    if (e.as == "date") { x = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(v); v = x ? x[3] + "-" + x[2] + "-" + x[1] : ""; }
+    if (e.codes) v = e.codes.hasOwnProperty(v) ? e.codes[v] : "";
+  }
+  if (e.chop) v = lcPipeChop(v);
+}
+if (v === "" && e.d != null) v = e.d;
+return v;
+}
+// The records, as an array of text. A = the answers (default: read from the PDF).
+function lcPipeRecords(d, A) {
+var R = [], i, j, r;
+A = A || lcPipeAnswers(d);
+for (i = 0; i < lcPipe.length; i++) { r = ""; for (j = 0; j < lcPipe[i].length; j++) r += lcPipeValue(lcPipe[i][j], A) + "|"; R.push(r); }
+return R;
+}
+// What goes into the QR code: the records, a newline between them.
+function lcPipeText(d) { return lcPipeRecords(d).join("\n"); }
+"""[1:-1]
+
 # THE BUTTON AND EVENT SCRIPTS. Each section below, after its "// ==== name ====" line, is stored in the PDF
 # as one action. The lines before the first marker (this header) are not stored.
 #   check-form    the "Check form" button (top right of every page)
@@ -471,6 +600,32 @@ if (!/\S/.test(q.value)) app.alert("Please press Generate QR Code first, so the 
 else if (!same) app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
 else if (bad) app.alert("The QR codes in the form do not match your answers (" + bad + "). Please press Generate QR Code again, then Print Form.", 1);
 else this.print(true, 0, lcLastPage(this, q.value), false, true);   // the form to the last QR code page in use
+"""[1:-1],
+    # The pipe-format form's versions (FORM["qrFormat"] == "pipe"): the same buttons, with lcPipeText in place of lcPayload.
+    "generate-qr-pipe": r"""
+// "GENERATE QR CODE" BUTTON (pipe-format form): as the ordinary one, but the QR code holds the old smart form's 4 pipe-delimited
+// records (lcPipeText, a newline between records) instead of the JSON, and is not padded with spaces.
+if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript).", 1);
+else {
+var m = lcRules(this), b = m.bad || [], t = [];
+var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
+if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
+if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
+if (t.length) { app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
+  var g = m.first && this.getField(m.first); if (g) g.setFocus(); }
+else { try { var q = this.getField("__qr"), x = lcPipeText(this); q.value = x; var n = lcDrawQr(this, x); this.pageNum = this.numPages - 1;
+  if (n == 1) app.alert("The QR code has been generated from your answers (" + x.length + " characters). Press Print Form to print the form with the QR code.", 3);
+  else app.alert("Your answers (" + x.length + " characters) are too long for one QR code, so two codes have been generated, one under the other. The Bank scans both. Press Print Form to print the form with the QR codes.", 3); }
+  catch (e) { app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1); } }
+}
+"""[1:-1],
+    "print-form-pipe": r"""
+// "PRINT FORM" BUTTON (pipe-format form): prints only once the QR code exists and still carries the current answers.
+var q = this.getField("__qr"), now = typeof lcPipeText == "function" ? lcPipeText(this) : "", same = false;
+try { same = String(q.value).replace(/\r\n?/g, "\n") == now; } catch (e) {}
+if (!/\S/.test(q.value)) app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
+else if (!same) app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
+else this.print(true, 0, this.numPages - 1, false, true);
 """[1:-1],
     "before-save": r"""
 // BEFORE SAVING OR PRINTING: the same list as Check form, shown only if something is missing or wrong, plus a warning

@@ -16,7 +16,7 @@ import zlib
 import pikepdf
 from pikepdf import Array, Dictionary, Name, String
 
-from acrobat_js import BUTTON_JS, DOCUMENT_JS
+from acrobat_js import BUTTON_JS, DOCUMENT_JS, PIPE_JS
 from layout import (ACCENT, FORMATS, INK, MARGIN, PAGE_HEIGHT, PAGE_WIDTH, RULE, TEXT, WHITE, Layout, active_rules,
                     fmt, js_json, num, pdf_string, rgb, safe, width, wrap)
 
@@ -43,7 +43,7 @@ RULES_ON_CALC = "/*calc*/lcRules(this, event.source ? event.source.name : null);
 # Acrobat stops reading the whole form script at the first character it doesn't expect. Copying files between
 # machines sometimes adds one you can't see (a "byte order mark") or turns ' and " into curly quotes, and then the
 # red boxes, calendars and Check form all stop working in Acrobat. So the build refuses scripts that aren't plain ASCII.
-for _name, _text in [("DOCUMENT_JS", DOCUMENT_JS)] + [("BUTTON_JS " + k, v) for k, v in BUTTON_JS.items()]:
+for _name, _text in [("DOCUMENT_JS", DOCUMENT_JS), ("PIPE_JS", PIPE_JS)] + [("BUTTON_JS " + k, v) for k, v in BUTTON_JS.items()]:
     _bad = sorted({c for c in _text if ord(c) > 126 or (ord(c) < 32 and c not in "\n\t")})
     if _bad:
         raise SystemExit(f"PROBLEM IN acrobat_js.py ({_name}): it contains characters that break Acrobat: {_bad!r}. "
@@ -152,11 +152,15 @@ def document_script(layout, table):
     tick_any = ", ".join(f"{json.dumps(q['id'])}: {js_json(q.get('options') or [])}" for q in questions if q["kind"] == "checks")
     code = re.search(r"[A-Z]+-\d+", form.get("formCode") or "")     # "LC-01"
     version = re.search(r"v([\d.]+)", form.get("formCode") or "")   # "1.0"
-    return script("document", MODEL=js_json(table), DEPS=js_json(dependency_index(table, form.get("checks") or [])), DATES=js_json([q["id"] for q in questions if q["kind"] == "date"]),
+    pipe = form.get("qrFormat") == "pipe"   # the 4 pipe-delimited records of the old smart form instead of the JSON (acrobat_js.py, PIPE_JS)
+    text = script("document", MODEL=js_json(table), DEPS=js_json(dependency_index(table, form.get("checks") or [])), DATES=js_json([q["id"] for q in questions if q["kind"] == "date"]),
                   GROUPS=tick_any, LONG=js_json([q["id"] for q in questions if q["kind"] == "long"]),
                   FORM=json.dumps(code.group(0) if code else safe(form["title"]), ensure_ascii=False),
                   VERSION=json.dumps(version.group(1) if version else "1"),
                   CHECKS=js_json([{k: (safe(v) if k == "m" else v) for k, v in c.items()} for c in form.get("checks") or []]))
+    if pipe:
+        text += "\n" + PIPE_JS.replace("__PIPE__", js_json(form["pipe"])).replace("__GROUPS__", tick_any)
+    return text
 
 
 def add_scripts(layout):
@@ -237,7 +241,7 @@ def add_scripts(layout):
         button = layout.add_field(name, "button", size=10)
         bx, by = qr["button"]
         layout.add_widget(button, bx + i * 162, by, 150, 22, caption=caption, border=ACCENT, bg=ACCENT, border_width=0,
-                          action=script(js_file), flags=0)
+                          action=script(js_file + ("-pipe" if layout.form.get("qrFormat") == "pipe" else "")), flags=0)
     return doc_script
 
 
@@ -594,5 +598,7 @@ def self_check(pdf_bytes, spec):
         assert int(fields[f"__qrx_{k}_frame"].Kids[0].F) == 2, "the extra QR frames should start hidden"
         assert all(w.P.objgen == templates[1].objgen for y in (0, 176) for w in fields[f"__qrx_{k}_{y}"].Kids), "extra QR rows must sit on the template"
     assert "bRename: true" in doc_script and 'getTemplate("qrx")' in doc_script, "the script does not spawn the extra QR page"
+    if spec.FORM.get("qrFormat") == "pipe":
+        assert "function lcPipeRecords(" in doc_script and "__PIPE__" not in doc_script and "__GROUPS__" not in doc_script, "the pipe records script is missing or not filled in"
     assert "/WS" in pdf.Root.AA and "/WP" in pdf.Root.AA, "missing the warning before save / print"
     return f"PASS: {len(pdf.pages)} pages, {len(fields)} fields, rules table, scripts, buttons and QR rows OK"

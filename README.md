@@ -123,6 +123,8 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | File | Purpose | Who opens it |
 |---|---|---|
 | `forms/lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). | Anyone changing the form |
+| `forms/lc_pipe_form.py` | **The LC form with the old smart form's pipe-delimited QR text** (Form LC-01P): imports `lc_form.py`, adds `FORM["qrFormat"] = "pipe"` and the 62-position table `FORM["pipe"]`; `IN_MENU = False` (not in `build_all.py`). See "The pipe-format form" below. | Anyone changing the pipe format |
+| `check_pipe.py`, `check_pipe_mock.js` | The oracle test of the pipe form: its records against the old form's own barcode code (`python check_pipe.py [--decode]`). Not needed to build. | Whoever changes `lc_pipe_form.py` or `PIPE_JS` |
 | `forms/example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
 | `forms/eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
 | `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
@@ -131,7 +133,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows (the QR code page's two codes and the hidden extra QR code page template). Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
-| `acrobat_js.py` | The JavaScript Acrobat runs inside the PDF: `DOCUMENT_JS` (rules engine, QR codes' text, QR encoder, drawing of up to 16 codes over the QR page and the extra QR pages) and `BUTTON_JS` (one entry per button). Plain ASCII only. | To change how answers are checked or what a button does |
+| `acrobat_js.py` | The JavaScript Acrobat runs inside the PDF: `DOCUMENT_JS` (rules engine, QR codes' text, QR encoder, drawing of up to 16 codes over the QR page and the extra QR pages) `PIPE_JS` (the pipe-format records, added to the pipe form's document script only) and `BUTTON_JS` (one entry per button). Plain ASCII only. | To change how answers are checked or what a button does |
 | `GUIDE.md` | Step-by-step guide for beginners, including copying the files to a work computer and fixing common problems. | Everyone, first |
 | `README.md` | This reference. | When you need the details |
 | `requirements.txt` | pikepdf and its three dependencies, at exact versions. | Setup |
@@ -154,6 +156,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | Add an LC rule across answers (e.g. a date order) | for any form: a check in the form file's `FORM["checks"]` (`not_before`, `after`, `in_range`, `account_length`); LC-only: a new numbered rule in `across()` |
 | What the QR codes hold | `lcPayload` in `acrobat_js.py` |
 | How many codes, how they are split, where codes 3 to 16 go | `LC_QR_CAP` / `LC_QR_MAX`, `lcDrawQr`, `lcExtra` in `acrobat_js.py`; the extra QR code page itself: `draw_qr_extra` in `layout.py` and `qr_slot` in `pdf_writer.py` |
+| What the pipe form's QR text holds | `FORM["pipe"]` in `forms/lc_pipe_form.py` and `PIPE_JS` in `acrobat_js.py` |
 | What a button says or does | its entry in `BUTTON_JS` in `acrobat_js.py` |
 
 ### Security
@@ -604,6 +607,70 @@ paragraphs are shortened and listed in `"truncated"`. The stand-in cannot say ho
 field names (run in three naming styles) and `deletePages` allowed or refused are assumptions, so also run the steps below
 in Acrobat.
 
+### The pipe-format form (Form LC-01P): the old smart form's barcode text in the QR code
+
+`forms/lc_pipe_form.py` is the same LC form (it imports `forms/lc_form.py`, so questions, wording, layout and rules cannot
+drift) built as its own PDF, `out/LC-Application-Pipe.pdf` (`python build.py lc_pipe_form.py`; footer "Form LC-01P"). It is
+**not** in `build_all.py`'s menu (the joined PDF stays 13 forms): the form file says `IN_MENU = False` and `build_all.py` refuses
+a menu entry that does. The only difference is what Generate QR Code puts into the QR code: not the JSON of the answers, but the
+**4 records of the old smart form's barcode**, so a back end that reads that format keeps working.
+
+Format (from `trade-smartform-extract/docs/LC-system-design.md`, section 5): 4 records, fields separated by `|`, the record
+number first, meaning from the position (`1_01` ... `4_03`, 62 positions), empty answers leave an empty slot (`||`), every
+position (the last too) followed by `|`; addresses as `[line][line][line]`; long text cut into lines padded with spaces to 65
+characters (the old documents say 64; the old code uses 65) joined by `{}`, an Enter also becoming `{}`; choices as codes
+(`L5Y`/`L5N`, `L6Y`/`L6N`, `L9Y`/`L9N`, price basis `C B A O D G F O`, `44E`/`44A`, `44F`/`44B`, `GSY`, `Y`/`N`, `S A U`, `LAA`/`LAB`,
+`LID`/`LIC`); an empty CIF number / amount / tolerance / term days / presentation days as `0000000` / `0`; dates `YYYY-MM-DD`; the
+amount without commas and with 2 decimals (`1250000.00`; assumed from the old layout table, see below); document clauses
+as generated sentences (`+ SIGNED COMMERCIAL INVOICES IN 3 ORIGINALS AND 2 COPIES.`).
+
+**How it is wired.** The mapping is data in the form file: `FORM["qrFormat"] = "pipe"` and `FORM["pipe"]`, a list of 4
+records, each a list of 62 entries (`{"p": "1_06", "id": "partial_shipment", "codes": {"allowed": "L5Y", "not allowed": "L5N"}}`;
+the kinds are listed at the top of `forms/lc_pipe_form.py` and in `acrobat_js.py`). `build.py` (`check_pipe`) refuses an entry that
+names a question that does not exist or a code for an answer the question does not offer. The encoder is one separate block in
+`acrobat_js.py`, `PIPE_JS` (`lcPipeAnswers`, `lcPipeChop`, `lcPipeValue`, `lcPipeRecords`, `lcPipeText`); `pdf_writer.py` appends it to the
+document script of a pipe form only, so every other form's PDF is byte-identical to before. Two button scripts, `generate-qr-pipe`
+and `print-form-pipe` in `BUTTON_JS`, call `lcPipeText` where the usual ones call `lcPayload`. **Nothing about the QR code itself
+changed**: `lcQrMatrix`, `lcDrawQr` and the QR page are the usual ones. The QR text is the 4 records with a **newline between
+records**, not padded with spaces (the JSON is padded; the records must stay exact). One code holds 2,329 bytes: records usually
+fit (one code); when longer, `lcDrawQr` splits the text in half into two codes (structured append), so a scanner that does not join
+them gets the second half in the second code (the split can fall inside a record). The QR page's explanatory text still says
+"as JSON": it belongs to the QR page, which this form does not change.
+
+**What the old format does not carry** (30 of the 108 questions, so they are not in the QR code, as in the old form's barcode; the
+printed PDF has them): application date; contact name / tel / fax; DC no, bank code; back-to-back (3); the "Drafts for the percentage"
+tick and the percentage; prepay choice; insurance arrangement and open cover no / with; beneficiary contact / tel / fax; the bank
+charges tick; post-shipment financing, financing type, currency, forward contract no; advance payment and account; debit
+issuance charges and account; authorised person; and the 4th address line of the applicant and the beneficiary (the old form had 3
+lines). Positions with no question use the old layout's "if empty" value: 1_02 (CIF number) = `0000000`; 1_18, 1_19, 1_23, 1_24,
+1_28, 1_29, 1_30, 1_35 and 2_09 to 2_11 are empty. To put a 4th address line in, add its id to that entry's `lines` list.
+
+**The old form's quirks, reproduced on purpose** (the Bank's back end expects them; change them in the table, not in the engine):
+the goods description is cut at 400 characters and the additional conditions at 600 (`"max"`); text lines are padded to 65, and a
+line can run to 66 characters before its `{}`; three advising modes share `S`, Local Delivery and Others share `O`; the first filled
+place of Dispatch from / Taking in charge / Receipt goes into 1_17 (and of the three destinations into 1_22), which kind it was is
+lost except for `44A` / `44B`; Date and Term drafts are both `N`; the drop-down words go into the clauses as typed
+(`COUNTERSIGNED BY One`, `need not BE VERIFIED`); the insurance clause is one fixed sentence whatever the arrangement; a
+quantity of `00` is not `0` (so `00 ORIGINALS`); a certificate of origin with 0 originals and 0 copies and a country is
+`+ CERTIFICATE OF ORIGIN, SHOWING COUNTRY OF ORIGIN AS X.`; "Beneficiary's certificate" with no way of sending ticked gives no
+clause; a locked box's stale answer is ignored (tolerance, term days, place, other documents ...). Not reproducible: the old
+form's airport text (never encoded) because this form has one "Port of Loading / Airport of Departure" box, so its text is
+encoded in 1_16 / 1_21. Not reproduced because the form makes the answer mandatory, so it cannot happen: a blank notify party
+(the old code then concatenated a field object, or the applicant's address, or "null"), a blank address line 1 (the old code then
+reused the beneficiary's name), a blank quantity next to a `0` ("IN null COPIES"), a `~` in long text (the old code treated it as
+Enter; `~` is not an allowed character).
+
+**The test (`check_pipe.py`).** `python check_pipe.py` builds the PDF and runs its own JavaScript in node against a minimal fake of
+Acrobat's document (`check_pipe_mock.js`), and runs the **old form's own barcode code** (`tools/run_lc_barcode.mjs` of the
+smart-form extract; set `SMARTFORM_EXTRACT` if it is not in `~/Documents/trade-smartform-extract`) on the same answers, translated
+to the old form's field paths by a separate table in the test. The 4 records must be byte-identical: for the golden sample of the
+extract, then for 300 random valid answer sets (all rules of the form respected; empty optionals, 1 to 3 line addresses, long text
+over 65 characters and with Enter, every option of every question, both states of every tick box, answers left in locked boxes),
+then it changes one code in the table and checks the comparison fails. `--decode` (needs `zxing-cpp`, install it in a scratch
+venv, it is not in `requirements.txt`) also runs the Generate QR Code script in the fake document, draws the QR matrices
+it fills in and decodes them with zxing-cpp: the decoded text must equal the 4 joined records (one code, and two codes joined).
+Exit 0 = all matched. NOT tested: Acrobat itself (the mock has fields that hold values and nothing else).
+
 ### Reading the QR codes
 
 The QR reader (the Bank's side) and its tests were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
@@ -893,3 +960,10 @@ layout: box widths are worked out from the label and `max`.
     description shortened and listed. NOT checked: Acrobat Pro, Reader (does `spawn` with `bRename: true` work and what are
     the new fields called; does `deletePages` work; how long drawing many codes takes), the Bank's scanners on 3 or more
     codes, and the readers (`read_qr.py`, the workbench), which were not changed and still expect at most two codes.
+40. **The pipe-format form (Form LC-01P).** `forms/lc_pipe_form.py` (its own PDF, `LC-Application-Pipe.pdf`, not in the menu):
+    the same questions as the LC, with the old smart form's 4 pipe-delimited barcode records as the QR text, so the Bank's
+    back end that reads that format keeps working. Mapping table in the form file, encoder in `acrobat_js.py` (`PIPE_JS`),
+    QR drawing, encoding and pages untouched (the records, a newline between them, go through `lcDrawQr`, which makes as many codes as the text needs). Checked by `check_pipe.py`:
+    byte-identical to the old code on the golden sample and 300 random valid answer sets, and the QR codes decode back to the
+    records. Every other form's PDF is byte-identical to before (built with `PYTHONHASHSEED=0`: three forms' PDFs differ
+    by one byte between two builds without it, as before this change). See "The pipe-format form".

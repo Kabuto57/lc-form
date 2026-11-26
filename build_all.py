@@ -264,6 +264,7 @@ def main():
     for group, forms in MENU:
         for file, code in forms:
             spec = load_form(file)   # from the forms folder
+            assert spec.IN_MENU, f"{file} says IN_MENU = False: it must not be in MENU"
             check_form(spec.FORM, spec.DEFAULTS, FORMATS)
             src = pikepdf.open(io.BytesIO(build(spec.FORM, spec.DEFAULTS)))
             first = len(out.pages)
