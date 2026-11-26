@@ -62,9 +62,12 @@ def pdf_parts(pdf_bytes):
     pdf = pikepdf.open(__import__("io").BytesIO(pdf_bytes))
     doc_js = zlib.decompress(pdf.Root.Names.JavaScript.Names[1].JS.read_raw_bytes()).decode("latin-1")
     types, button, printer = {}, None, None
+    pages = {p.objgen: i for i, p in enumerate(pdf.pages)}
     for f in pdf.Root.AcroForm.Fields:
         name, ft, ff = str(f.T), str(f.get("/FT", "")), int(f.get("/Ff", 0))
-        types[name] = {"/Tx": "text", "/Ch": "combobox"}.get(ft) or ("button" if ff & 65536 else "radiobutton" if ff & 32768 else "checkbox")
+        widget = f.Kids[0] if "/Kids" in f else f
+        types[name] = [{"/Tx": "text", "/Ch": "combobox"}.get(ft) or ("button" if ff & 65536 else "radiobutton" if ff & 32768 else "checkbox"),
+                       pages.get(widget.P.objgen, -1) if "/P" in widget else -1]
         if name in ("__generate_qr", "__print_form"):
             js = f.Kids[0].A.JS if "/Kids" in f else f.A.JS
             js = js.read_bytes().decode("latin-1") if isinstance(js, pikepdf.Stream) else str(js)
@@ -468,8 +471,9 @@ def main():
         fail("the guard does not bite: a changed code (L5Y -> L5X) was not noticed")
     print("guard bites: with 1_06 allowed = L5X the records no longer match the old code's")
 
+    build_guard_check(spec)
     hostile_check(spec, parts, cases[0][0])
-    print_check(spec, parts, cases[0][0])
+    print_check(spec, parts, {k: v for k, v in cases[0][0].items() if k not in cases[0][1]})   # (Generate QR Code clears locked boxes first)
     if args.decode:
         # (the golden sample is not a complete application: Generate QR Code would refuse it. Generate QR Code first clears the
         # answers left in locked boxes, so those are left out here.)
@@ -477,6 +481,17 @@ def main():
         sizes = sorted(range(len(cases)), key=lambda i: -sum(map(len, mine[i])))
         maxi = {k: v for k, v in random_answers(rng, spec.FORM, maxi=True)[0].items()}   # every optional box answered, texts at full length
         decode_check(spec, parts, clean[:12] + [clean[i] for i in sizes[:3]] + [maxi])
+        # Records longer than the table's own cuts allow (400 / 600 characters: a Bank that lifts them) need several codes: codes 3
+        # and up go on the extra QR code pages. The same table with "max" removed; 6,400-character goods and conditions.
+        free = copy.deepcopy(spec.FORM)
+        for r in free["pipe"]:
+            for e in r:
+                e.pop("max", None)
+        fparts = pdf_parts(build_pdf(free))
+        big = {k: v for k, v in maxi.items() if k not in ("goods_description", "additional_conditions")}
+        bigs = [dict(big, goods_description=long_text_of(rng, 6400), additional_conditions=long_text_of(rng, n)) for n in (300, 2500, 6400)]
+        decode_check(spec, fparts, bigs, free, minimum_codes=3)
+        print_check(spec, fparts, bigs[2], free)
     print("PASS")
 
 
@@ -518,22 +533,45 @@ def hostile_check(spec, parts, base):
     print(f"hostile answers: {len(cases)} (each of {len(DELIMITERS)} delimiter / newline values in {len(targets)} boxes) keep every record at {counts} positions with no raw newline")
 
 
-def print_check(spec, parts, base):
-    """Print Form must accept the stored QR text however Acrobat stores newlines in the single-line hidden field, and refuse a changed answer."""
-    form = spec.FORM
-    text = "\n".join(run_node("records", parts, [field_values(form, base)])[0])
-    stored = [text, text.replace("\n", ""), text.replace("\n", "\r"), text.replace("\n", "\r\n"), text.replace("\n", " ")[:0] + text.replace("\n", "")]
-    cases = [dict(field_values(form, base), __qr=s) for s in stored]
-    changed = dict(base, applicant_name=base["applicant_name"] + "X")
-    cases.append(dict(field_values(form, changed), __qr=text))
-    cases.append(dict(field_values(form, base), __qr=""))
+def print_check(spec, parts, base, form=None):
+    """After Generate QR Code, Print Form must print whatever way the viewer stored the newlines of the single-line hidden field,
+    and refuse a changed answer, a missing code and an empty field."""
+    form = form or spec.FORM
+    vals = field_values(form, base)
+    text = "\n".join(run_node("records", parts, [vals])[0])
+    ways = {"kept": text, "removed": text.replace("\n", ""), "CR": text.replace("\n", "\r"), "CRLF": text.replace("\n", "\r\n")}
+    cases = [{"values": vals, "gen": True, "stored": s, "after": {}} for s in ways.values()]
+    cases.append({"values": vals, "gen": True, "stored": None, "after": {"applicant_name": base["applicant_name"] + "X"}})
+    cases.append({"values": vals, "gen": False, "stored": "", "after": {}})
+    cases.append({"values": vals, "gen": False, "stored": text, "after": {}})   # a stored text but no code drawn
     res = run_node("print", parts, cases)
-    for s, r in zip(["as set", "newlines removed", "CR", "CRLF", "newlines removed (again)"], res):
+    for way, r in zip(ways, res):
         if not r["printed"]:
-            fail(f"Print Form refused the stored QR text ({s}): {r['alerts']}")
-    if res[5]["printed"] or res[6]["printed"]:
-        fail("Print Form printed although the answers changed or no QR code exists: the check does not bite")
-    print("Print Form: accepts the stored QR text with newlines kept, removed, CR or CRLF; refuses a changed answer and an empty code")
+            fail(f"Print Form refused the stored QR text ({way}): {r['alerts']}")
+    if any(r["printed"] for r in res[4:]):
+        fail("Print Form printed although the answers changed, no code was drawn or the field is empty: the check does not bite")
+    print("Print Form: prints after Generate QR Code with the stored text's newlines kept, removed, CR or CRLF; refuses a changed answer, "
+          "a missing code and an empty code")
+
+
+def build_guard_check(spec):
+    """The build must stop on a table that maps answers to codes where there are no answers to map: codes on a free-text question,
+    codes on a tick box under a key other than "true", codes without an id; and must accept the real table."""
+    def entry(form, p):
+        return next(e for r in form["pipe"] for e in r if e["p"] == p)
+    bad = {"codes on a free-text question": ("1_03", {"codes": {"ACME": "X"}}),
+           "codes on a tick box with the key 'yes'": ("2_12", {"codes": {"yes": "L9Y"}}),
+           "codes without an id": ("1_05", {"codes": {"x": "y"}})}
+    for label, (p, change) in bad.items():
+        form = copy.deepcopy(spec.FORM)
+        entry(form, p).update(change)
+        try:
+            check_form(form, spec.DEFAULTS, FORMATS)
+        except SystemExit:
+            continue
+        fail(f"the build accepted a table with {label} (position {p})")
+    check_form(copy.deepcopy(spec.FORM), spec.DEFAULTS, FORMATS)
+    print(f"build guard: refuses {len(bad)} tables with codes where there are no answers to map; accepts the real table")
 
 
 def coverage(form, cases):
@@ -566,15 +604,16 @@ def coverage(form, cases):
     return f"{entered} with Enter in long text, {longer} over 130 characters, {stale} with a stale answer in a locked box, {empty_opt} with an empty optional paragraph"
 
 
-def decode_check(spec, parts, answer_sets):
+def decode_check(spec, parts, answer_sets, form=None, minimum_codes=1):
     """Runs the Generate QR Code script of the PDF, renders the QR matrices it draws and decodes them with zxing-cpp."""
     try:
         import zxingcpp
         from PIL import Image
     except ImportError:
         fail("--decode needs zxing-cpp (python -m pip install zxing-cpp, in a scratch venv; it is not in requirements.txt)")
-    results = run_node("generate", parts, [field_values(spec.FORM, a) for a in answer_sets])
-    records = run_node("records", parts, [field_values(spec.FORM, a) for a in answer_sets])
+    form = form or spec.FORM
+    results = run_node("generate", parts, [field_values(form, a) for a in answer_sets])
+    records = run_node("records", parts, [field_values(form, a) for a in answer_sets])
     sizes = []
     for n, (res, recs) in enumerate(zip(results, records)):
         expected = "\n".join(recs)
@@ -601,7 +640,11 @@ def decode_check(spec, parts, answer_sets):
         if text != expected:
             fail(f"decode case {n}: decoded text differs from the records\n  decoded: {text[:120]!r}\n  records: {expected[:120]!r}")
         sizes.append(len(res["codes"]))
-    print(f"decode: {len(answer_sets)} answer sets -> Generate QR Code -> {sizes.count(1)} one-code and {sizes.count(2)} two-code results, decoded text = the joined records")
+        if len(res["codes"]) != -(-len(expected.encode("latin-1", "replace")) // 2300):
+            fail(f"decode case {n}: {len(res['codes'])} codes for {len(expected)} characters (one per 2,300 bytes expected)")
+    if max(sizes) < minimum_codes:
+        fail(f"decode: no case needed {minimum_codes} codes (most: {max(sizes)})")
+    print(f"decode: {len(answer_sets)} answer sets -> Generate QR Code -> codes per set {sorted(set(sizes))} (largest {max(sizes)}), decoded text = the joined records")
 
 
 if __name__ == "__main__":

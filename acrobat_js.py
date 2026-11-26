@@ -414,7 +414,7 @@ function lcDrawQr(d, text) {
 # THE PIPE-FORMAT TEXT (only for a form file with FORM["qrFormat"] == "pipe", e.g. forms/lc_pipe_form.py). pdf_writer.py
 # appends this block to the document script of such a form and fills in __PIPE__ (the position table from the form file)
 # and __GROUPS__. Other forms do not get it, so their PDFs are unchanged. It replaces lcPayload for that form: the
-# "Generate QR Code" button (BUTTON_JS "generate-qr-pipe") puts lcPipeText(doc) into the ordinary QR code path (lcDrawQr)
+# "Generate QR Code" button (BUTTON_JS "generate-qr-pipe") puts lcPipeText(doc) into the ordinary QR code path (lcDrawQr, up to 16 codes)
 # instead of the JSON text. lcPipeText is the 4 records of the old smart form's barcode, one after the other, with a newline
 # between records. Nothing here touches the QR encoder or its drawing.
 PIPE_JS = r"""
@@ -616,9 +616,10 @@ else this.print(true, 0, lcLastPage(this, q.value), false, true);   // the form 
 """[1:-1],
     # The pipe-format form's versions (FORM["qrFormat"] == "pipe"): the same buttons, with lcPipeText in place of lcPayload.
     "generate-qr-pipe": r"""
-// "GENERATE QR CODE" BUTTON (pipe-format form): as the ordinary one, but the QR code holds the old smart form's 4 pipe-delimited
-// records (lcPipeText, a newline between records) instead of the JSON, and is not padded with spaces.
-if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript).", 1);
+// "GENERATE QR CODE" BUTTON (pipe-format form): as the ordinary one, but the QR codes hold the old smart form's 4 pipe-delimited
+// records (lcPipeText, a newline between records) instead of the JSON. lcDrawQr does not pad or change the text; as many codes
+// as the text needs (at most 16), the same pages as the ordinary form.
+if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was changed after it was built: ask the form's maintainer.", 1);
 else {
 var m = lcRules(this), b = m.bad || [], t = [];
 var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
@@ -626,19 +627,24 @@ if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" 
 if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
 if (t.length) { app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
   var g = m.first && this.getField(m.first); if (g) g.setFocus(); }
-else { try { var q = this.getField("__qr"), x = lcPipeText(this); q.value = x; var n = lcDrawQr(this, x); this.pageNum = this.numPages - 1;
+else { try { var q = this.getField("__qr"), x = lcPipeText(this); q.value = x; var n = lcDrawQr(this, x);
+  try { this.pageNum = q.page; } catch (e) {}   // a viewer may refuse to change page inside a click that added pages: the codes are drawn all the same
   if (n == 1) app.alert("The QR code has been generated from your answers (" + x.length + " characters). Press Print Form to print the form with the QR code.", 3);
-  else app.alert("Your answers (" + x.length + " characters) are too long for one QR code, so two codes have been generated, one under the other. The Bank scans both. Press Print Form to print the form with the QR codes.", 3); }
+  else app.alert("Your answers (" + x.length + " characters) need " + n + " QR codes, so " + n + " codes have been generated" + (n > 2 ? ": two on the QR code page and the rest, two to a page, on the " + lcPagesFor(n) + " page" + (lcPagesFor(n) > 1 ? "s" : "") + " after it" : ", one under the other") + ". The Bank scans all " + n + " codes. Press Print Form to print the form with the QR codes.", 3); }
   catch (e) { app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1); } }
 }
 """[1:-1],
     "print-form-pipe": r"""
-// "PRINT FORM" BUTTON (pipe-format form): prints only once the QR code exists and still carries the current answers.
-var q = this.getField("__qr"), now = typeof lcPipeText == "function" ? lcPipeText(this) : "", same = false;
-try { same = String(q.value).replace(/[\r\n]/g, "") == now.replace(/[\r\n]/g, ""); } catch (e) {}   // the hidden box may keep, change or drop the newlines between records; the records hold none
+// "PRINT FORM" BUTTON (pipe-format form): prints only once the QR codes exist and still carry the current records, every code
+// needed is on its page and none is left over. The hidden box may keep, change or drop the newlines between records (the records
+// hold none), so the comparison, and the code count, use the current records, not the stored text.
+var q = this.getField("__qr"), now = typeof lcPipeText == "function" ? lcPipeText(this) : "", same = false, bad = "";
+try { same = String(q.value).replace(/[\r\n]/g, "") == now.replace(/[\r\n]/g, ""); } catch (e) {}
+try { bad = lcQrCheck(this, now); } catch (e) { bad = String(e); }
 if (!/\S/.test(q.value)) app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
 else if (!same) app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
-else this.print(true, 0, this.numPages - 1, false, true);
+else if (bad) app.alert("The QR codes in the form do not match your answers (" + bad + "). Please press Generate QR Code again, then Print Form.", 1);
+else this.print(true, 0, lcLastPage(this, now), false, true);   // the form to the last QR code page in use
 """[1:-1],
     "before-save": r"""
 // BEFORE SAVING OR PRINTING: the same list as Check form, shown only if something is missing or wrong, plus a warning

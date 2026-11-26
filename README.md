@@ -630,12 +630,15 @@ the kinds are listed at the top of `forms/lc_pipe_form.py` and in `acrobat_js.py
 names a question that does not exist or a code for an answer the question does not offer. The encoder is one separate block in
 `acrobat_js.py`, `PIPE_JS` (`lcPipeAnswers`, `lcPipeChop`, `lcPipeValue`, `lcPipeRecords`, `lcPipeText`); `pdf_writer.py` appends it to the
 document script of a pipe form only, so every other form's PDF is byte-identical to before. Two button scripts, `generate-qr-pipe`
-and `print-form-pipe` in `BUTTON_JS`, call `lcPipeText` where the usual ones call `lcPayload`. **Nothing about the QR code itself
-changed**: `lcQrMatrix`, `lcDrawQr` and the QR page are the usual ones. The QR text is the 4 records with a **newline between
-records**, not padded with spaces (the JSON is padded; the records must stay exact). One code holds 2,329 bytes: records usually
-fit (one code); when longer, `lcDrawQr` splits the text in half into two codes (structured append), so a scanner that does not join
-them gets the second half in the second code (the split can fall inside a record). The QR page's explanatory text still says
-"as JSON": it belongs to the QR page, which this form does not change.
+and `print-form-pipe` in `BUTTON_JS`, call `lcPipeText` where the usual ones call `lcPayload`. **Nothing about the QR codes themselves
+changed**: `lcQrMatrix`, `lcDrawQr`, the QR page and the extra QR code pages are the usual ones (see "How the QR codes are made"). The
+QR text is the 4 records with a **newline between records**, **not padded** (`lcPayload` pads the JSON; `lcDrawQr` itself does not
+change the text, so the records reach the codes exactly). `lcDrawQr` makes one code per 2,300 bytes, at most 16 (codes 3 and up on
+extra pages): the table's own cuts (400 / 600 characters) keep the records at one or two codes; without them (a Bank that lifts the
+cuts) 6,400-character texts give 5 to 7. The text is cut into equal slices, so a slice boundary can fall inside a record; a reader must
+join the codes first. Print Form (`print-form-pipe`) does what the usual one does (every code on its page, none left over, prints to
+the last QR page in use) with the current records in place of the JSON. The QR page's explanatory text still says "as JSON": it is the
+QR page's, which this form does not change.
 
 **Answers cannot change the layout of the records.** The keystroke filter refuses `| [ ] { }`, but a value set by FDF import,
 autofill or a pasted newline skips it, so `lcPipeAnswers` turns each of those characters, and any line break, into a space before
@@ -676,8 +679,10 @@ extract, then for 300 random valid answer sets (all rules of the form respected;
 over 65 characters and with Enter, every option of every question, both states of every tick box, answers left in locked boxes),
 then it changes one code in the table and checks the comparison fails. `--decode` (needs `zxing-cpp`, install it in a scratch
 venv, it is not in `requirements.txt`) also runs the Generate QR Code script in the fake document, draws the QR matrices
-it fills in and decodes them with zxing-cpp: the decoded text must equal the 4 joined records (one code, and two codes joined).
-Exit 0 = all matched. NOT tested: Acrobat itself (the mock has fields that hold values and nothing else).
+it fills in and decodes them with zxing-cpp: the decoded text must equal the 4 joined records, for 1 to 2 codes and (the table with its cuts removed)
+5 to 7 codes over the extra pages. The fake document has pages, the hidden `qrx` template, `Template.spawn` and `deletePages`, like
+`proof_multiqr.py`'s. It also checks that the build refuses `codes` where there are no answers to map. Exit 0 = all matched.
+NOT tested: Acrobat itself (the stand-in has fields, pages and nothing else).
 
 ### Reading the QR codes
 
@@ -975,7 +980,7 @@ layout: box widths are worked out from the label and `max`.
     byte-identical to the old code on the golden sample and 300 random valid answer sets, and the QR codes decode back to the
     records. Every other form's PDF is byte-identical to before (built with `PYTHONHASHSEED=0`: three forms' PDFs differ
     by one byte between two builds without it, as before this change). See "The pipe-format form".
-40. **Pipe form: hostile values and Print Form.** Delimiters (`| [ ] { }`) and line breaks in an answer no longer change the
+41. **Pipe form: hostile values and Print Form.** Delimiters (`| [ ] { }`) and line breaks in an answer no longer change the
     records' layout (`lcPipeAnswers`), Print Form no longer depends on how Acrobat stores the newlines between records, and
     `build.py` refuses `"codes"` on a question without options (a tick box accepts only the key `true`). `check_pipe.py` has the
     hostile and Print Form checks.
