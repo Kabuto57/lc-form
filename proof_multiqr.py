@@ -38,6 +38,7 @@ global.display = {visible: 0, hidden: 1, noPrint: 2, noView: 3};
 global.color = {red: ["RGB", 1, 0, 0], black: ["G", 0], white: ["G", 1], transparent: ["T"]};
 global.console = console;
 const alerts = [], printed = [];
+let spawnBudget = Infinity;      // how many more spawns succeed (a step can set it, to make the viewer refuse)
 global.event = {name: "WillSave"};
 const pages = [];                       // the pages in the document (objects); a template is not in this list
 const tmpl = {id: "template"};
@@ -64,6 +65,7 @@ const doc = {
   getTemplate(n) {
     if (n !== D.template || !D.hasTemplate) throw new Error("no template " + n);
     return {spawn(o) {
+      if (spawnBudget-- <= 0) throw new Error("the viewer refuses to add a page");
       if (o.bRename !== true) throw new Error("bRename must be true");
       const pg = {id: "s" + pages.length}, at = Math.min(o.nPage, pages.length);
       pages.splice(at, 0, pg);
@@ -103,6 +105,7 @@ const out = [];
 for (const step of JSON.parse(fs.readFileSync(process.argv[5], "utf8"))) {
   for (const k of Object.keys(step.set)) get(k).value = step.set[k];
   let err = "", pressed = null, n = 0;
+  spawnBudget = step.failAfter === undefined ? Infinity : step.failAfter;
   if (step.reset) { press("reset-form"); }
   else { try { pressed = press("generate-qr"); } catch (e) { err = String(e); } }
   const text = String(get("__qr").value);
@@ -112,13 +115,14 @@ for (const step of JSON.parse(fs.readFileSync(process.argv[5], "utf8"))) {
   if (!step.reset && !err) {
     s.print = press("print-form");                       // right after Generate: prints, from the first form page to the last code page
     s.save = press("before-save");                       // nothing to warn about
-    if (step.tamper) {                                   // negative cases: blanking a code must be noticed, and Print Form must refuse
+    if (step.tamper) {                                   // negative cases: a blanked code, or a code left in a slot beyond the last, must be noticed
       s.tamper = {};
       for (const c of step.tamper) {
-        const keep = fields.filter(f => f.name.endsWith(c.field)).map(f => [f, f.value]);
-        for (const [f] of keep) f.value = "";
-        s.tamper[c.field] = {check: global["lcQrCheck" + SFX](doc, text), print: press("print-form"), save: press("before-save")};
-        for (const [f, v] of keep) f.value = v;
+        const hit = fields.filter(f => f.name.endsWith(c.field) && f.pg !== tmpl && (c.fill ? f.value === "" : true)).map(f => [f, f.value]);
+        if (!hit.length) throw new Error("tamper " + c.field + ": no such slot to change");
+        for (const [f] of hit) f.value = c.fill ? "n" : "";
+        s.tamper[(c.fill ? "fill " : "blank ") + c.field] = {check: global["lcQrCheck" + SFX](doc, text), print: press("print-form"), save: press("before-save")};
+        for (const [f, v] of hit) f.value = v;
       }
       const k = step.stale, was = get(k).value;
       get(k).value = was + " X";                         // answers changed after Generate: Print Form must refuse
@@ -266,6 +270,15 @@ def run(info, steps, style, block_delete):
 def check_step(st, want, info, block):
     """The problems found in one step's outcome (an empty list = it passed)."""
     notes = []
+    if want.get("fail"):   # the viewer refused to add a page: Generate says so, and nothing printable is left that does not match
+        generated = " ".join(st["generate"]["alerts"]) if st["generate"] else ""
+        if "could not be generated" not in generated:
+            notes.append(f"Generate QR Code did not report the failure: {generated[:90]!r}")
+        if not st["check"] or st["print"]["printed"] or not any("do not match" in a for a in st["print"]["alerts"]):
+            notes.append(f"Print Form was not stopped: {st['print']}")
+        if info["prefix"] == "" and not any("not complete" in a for a in st["save"]["alerts"]):
+            notes.append("saving was not warned")
+        return notes
     n, payload, joined_pdf = st["n"], st["payload"], bool(info["prefix"])
     form_pages = info["numPages"]
     first_page = 1 if joined_pdf else 0                      # the joined PDF prints from page 1 (page 0 is the menu)
@@ -316,9 +329,9 @@ def check_step(st, want, info, block):
             notes.append(f"before-save warned: {st['save']['alerts']}")
         for field, t in (st.get("tamper") or {}).items():   # a blanked code must be noticed by the check, Print Form and saving
             if not t["check"] or t["print"]["printed"] or not any("do not match" in a for a in t["print"]["alerts"]):
-                notes.append(f"blanking {field} was not stopped by Print Form: {t['print']}")
+                notes.append(f"changing {field} was not stopped by Print Form: {t['print']}")
             if not joined_pdf and not any("not complete" in a for a in t["save"]["alerts"]):
-                notes.append(f"blanking {field} was not warned about before saving")
+                notes.append(f"changing {field} was not warned about before saving")
         if st.get("stale") and (st["stale"]["printed"] or not any("answers have changed" in a for a in st["stale"]["alerts"])):
             notes.append("Print Form printed codes older than the answers")
     # nothing stale on any page: only the codes in use have rows, frames and labels
@@ -365,16 +378,21 @@ def main():
     def step(label, a, **kw):
         return {"label": label, "set": {**base, **a}, "stale": list(texts)[0], **kw}
     bite = [{"field": "__qrx_1_0"}, {"field": "__qr1_0"}, {"field": "__qr2_0"}]
+    left = [{"field": "__qr2_0", "fill": True}]               # a code left in a slot beyond the last one
+    left_extra = [{"field": "__qrx_2_0", "fill": True}]       # ... on an extra page (7 codes: the second slot of the last page)
     steps = [
-        step("2000", answers(900, 900), expect=1),
+        step("2000", answers(900, 900), expect=1, tamper=left),
         step("4000", answers(1900, 1900), expect=2),
         step("9000", answers(4400, 4400), expect=4, tamper=bite),
-        step("15300 (LC worst case)", answers(6500, 6500, others=len(texts)), expect=7, tamper=bite),
+        step("15300 (LC worst case)", answers(6500, 6500, others=len(texts)), expect=7, tamper=bite + left_extra),
         step("back to 4000", answers(1900, 1900), expect=2),
         step("back to 2000", answers(900, 900), expect=1),
         step("oversized: 2 x 30000 chars", {"goods_description": text_of(rng, 30000), "additional_conditions": text_of(rng, 30000)}, expect=16, cut=["goods_description"], tamper=bite),
         step("oversized: 2 x 40000 chars", {"goods_description": text_of(rng, 40000), "additional_conditions": text_of(rng, 40000)}, expect=16, cut=["goods_description", "additional_conditions"]),
         step("back to 2000 after 16 codes", answers(900, 900), expect=1),
+        step("viewer refuses to add any page", answers(6500, 6500, others=len(texts)), fail=True, failAfter=0),
+        step("viewer adds 1 page, refuses the next", answers(6500, 6500, others=len(texts)), fail=True, failAfter=1),
+        step("recovers: 7 codes", answers(6500, 6500, others=len(texts)), expect=7, tamper=left_extra),
         {"label": "reset", "set": {}, "reset": True, "expect": 0},
     ]
     failures = checked = 0
@@ -384,11 +402,34 @@ def main():
             continue
         for style in "ABC":
             for block in (False, True):
-                for st, want in zip(run(info, steps, style, block), steps):
+                # (with deletePages refused, the pages of the 16-code step are still there, so no spawn is needed and none can fail)
+                todo = [x for x in steps if not (block and x.get("fail"))]
+                for st, want in zip(run(info, todo, style, block), todo):
                     notes = check_step(st, want, info, block)
                     checked += 1
                     failures += bool(notes)
                     print(("FAIL " if notes else "PASS ") + f"[{what}, rename {style}, deletePages {'blocked' if block else 'allowed'}] {want['label']:30} codes={st['n']:2} pages={st['numPages']}"
+                          + ("  " + "; ".join(notes) if notes else ""))
+    # every one of the 13 forms inside the joined PDF: 1 code, 3 codes, back to 1, reset, with and without deletePages
+    if joined is not None:
+        for file, code in [f for _, forms in build_all.MENU for f in forms]:
+            form = load_form(file).FORM
+            qs = [q for s in form["sections"] for q in s["fields"] if q["kind"] in ("text", "long")]
+            longest = max(qs, key=lambda q: q.get("max") or 0)
+            reach = (longest.get("max") or 0) >= 6000     # else a synthetic long value (the stand-in does not enforce max)
+            info = load_pdf_for_harness(open(build_all.OUT, "rb").read(), code)
+            own = [
+                {"label": "1 code", "set": {longest["id"]: text_of(rng, 500)}, "stale": longest["id"], "expect": 1, "tamper": left},
+                {"label": "3 codes", "set": {longest["id"]: text_of(rng, 6000)}, "stale": longest["id"], "expect": 3, "tamper": bite[:2] + left_extra},
+                {"label": "back to 1", "set": {longest["id"]: text_of(rng, 500)}, "stale": longest["id"], "expect": 1},
+                {"label": "reset", "set": {}, "reset": True, "expect": 0},
+            ]
+            for block in (False, True):
+                for st, want in zip(run(info, own, "A", block), own):
+                    notes = check_step(st, want, info, block)
+                    checked += 1
+                    failures += bool(notes)
+                    print(("FAIL " if notes else "PASS ") + f"[joined PDF form {code}, {longest['id']} {'(real max ' + str(longest.get('max')) + ')' if reach else '(synthetic 6000, form max ' + str(longest.get('max')) + ')'}, deletePages {'blocked' if block else 'allowed'}] {want['label']:10} codes={st['n']:2} pages={st['numPages']}"
                           + ("  " + "; ".join(notes) if notes else ""))
     print(f"ALL PASS ({checked} steps)" if not failures else f"{failures} of {checked} steps FAILED")
     sys.exit(1 if failures else 0)
