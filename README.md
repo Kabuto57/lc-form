@@ -129,7 +129,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | `forms/eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
 | `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
 | `proof_multiqr.py` | Proof that Generate QR Code makes as many codes as the answers need (`python proof_multiqr.py`): runs the form's own script under Node with a stand-in for Acrobat and decodes every code with zxing-cpp (a test tool, not in `requirements.txt`). See "Testing the QR codes outside Acrobat" below. | After changing `lcPayload`, `lcDrawQr` or the QR pages |
-| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and that form's pages are copied in after the menu (every form's pages are hidden page templates, copied with `Template.spawn` by the menu's script; choosing another form asks first and clears the open form's answers); the Main menu button on every page of a form, except the extra QR code pages (and the bookmark) asks, then deletes the open form's pages and clears its answers, so the PDF is just the menu page again (if the viewer refuses to delete pages it only goes to the menu page and the form stays); bookmarks. Needs JavaScript on. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
+| `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and you go to that form's first page. Every form's pages are ordinary pages that stay in the PDF, one form after another in menu order, so nothing is hidden, added or deleted when you switch forms (the free Acrobat Reader has refused hiding and deleting pages); answers are kept per form, and the Main menu button on every page of a form (not the extra QR code pages) and the bookmark are a plain jump to page 0; bookmarks. Only Generate QR Code with more than 2 codes adds pages (copied right after that form's QR code page). Needs JavaScript on for the tick box check, the buttons and the checks. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
 | `pdf_writer.py` | Step 2: builds the rules table, attaches the scripts, places the buttons and QR code rows (the QR code page's two codes and the hidden extra QR code page template). Step 3: writes the PDF with pikepdf. Then the self-check. Refuses scripts with characters that would break Acrobat. | Rarely |
@@ -549,8 +549,8 @@ Each code is 110 mm square: 177 × 177 squares of 0.6 mm, on every page.
 **The extra pages exist only while needed.** In the PDF they are one hidden *page template* named `qrx` (not one of the
 form's pages: 4 pages as before). Generate QR Code copies it after the QR code page with `Template.spawn` (once for
 every two codes beyond the first two) and deletes the copies it no longer needs, so a form whose answers shrink, or
-that is reset, goes back to its 4 pages. In the one-PDF build each form has its own template (`LC_qrx`), and the Main
-menu button deletes the extra pages with the rest of the form. The fields of a copy are created by the spawn (the viewer
+that is reset, goes back to its 4 pages. In the one-PDF build each form has its own template (`LC_qrx`); the copies go right after that form's QR code
+page (the later forms move down), and Reset form deletes them. The fields of a copy are created by the spawn (the viewer
 renames them, `bRename: true`), so the form does not carry 16 codes' worth of fields: only the template's 358 (177 rows
 × 2 codes, plus labels and frames). If the viewer refuses `deletePages` (not known for the free Reader), a page that
 could not be deleted stays but is emptied, says "(this page is not used)", and Print Form leaves it out (it prints
@@ -716,8 +716,9 @@ or a script, also test the PDF in Acrobat:
 10. Shorten the answers and press Generate QR Code again: the extra pages go away (or, if the viewer refuses to delete
     pages, are left empty and marked "(this page is not used)"), no old code shows on any page, and Print Form leaves
     them out. Press Reset form: the form is back to its 4 pages.
-11. In the one-PDF build (`Trade-Application-Forms.pdf`), open a form from the menu and repeat 8 to 10. Then press Main
-    menu: the extra pages go with the form's other pages.
+11. In the one-PDF build (`Trade-Application-Forms.pdf`), open a form from the menu (use a middle one, e.g. BG) and repeat 8 to 10.
+    The extra pages must come right after that form's QR code page, with the next form after them, and Print Form must print
+    only that form's pages. Main menu only goes to page 0.
 12. In the free Acrobat Reader, repeat 8 and 10 and note what happened: does Generate QR Code add the pages (`spawn` with
     `bRename: true`), do they get deleted (`deletePages`), and how long does drawing 6 or more codes take? None of this
     is tested there.
@@ -1024,3 +1025,24 @@ layout: box widths are worked out from the label and `max`.
     `check_pipe.py` compares all 4 + 4 choices with the old barcode code and checks the greying, locking and mandatory state.
     The line 2 boxes are labelled just "Port (line 2)" / "Place (line 2)", and the Shipment section starts on a new page (`new_page=True`)
     so the drop-down stays with its boxes (it had been left alone at the bottom of page 1).
+47. **The one-PDF menu keeps every form's pages (for the free Reader).** Reported 27 Nov: in the free Acrobat Reader (26.0.32211)
+    switching forms failed with "step deletePages, RaiseError: One or more pages are in use and could not be deleted"; the
+    Reader refused to hide or delete (and may refuse to add) the pages the menu was swapping (items 28 to 35). `build_all.py` now goes back to
+    the item 25 layout, without any of that: the menu is page 0 and every form's pages follow it as ordinary pages, always in
+    the PDF (39 pages), in menu order. Gone: the form page templates, `Template.spawn` / `deletePages` for switching, the
+    `showForm` / `showMenu` / `goPage` / `failed` functions and the hidden `OPEN` field. A click on a form (or its bookmark)
+    runs `openForm`: if the terms tick box (`ACCEPT`) is off it asks to tick it, else it goes to the form's first page (worked
+    out at the click, as the form's QR code page minus the pages in front of it, because the extra QR code pages of the
+    forms before it push it down). The box now only guards those links and bookmarks: the pages can also be reached by
+    scrolling. Main menu (button and bookmark) is a plain jump to page 0 (no script) and no longer clears the form: use Reset
+    form. Each form's fields and scripts stay scoped (`LC.applicant_name`, `lcRules_LC` ...). Changes to make that right:
+    (a) Print Form prints from the form's own first page to its last QR code page in use (it printed from page 1);
+    (b) a form's hidden `__checks` calculation runs only when the box that changed belongs to that form (it used `OPEN`);
+    (c) Generate QR Code copies the extra QR code page in right after the form's QR code page and the extra pages already
+    there (`nPage` = that page + 1: with `bOverlay: false` Adobe inserts the new page BEFORE page `nPage`), and `lcExtra`
+    (`acrobat_js.py`) takes only the pages that follow the QR code page one after another, so one form never mistakes the
+    next form's extra pages for its own. Still needing `Template.spawn` and `deletePages`, which the free Reader may refuse
+    (untested): only a long answer (more than 2 QR codes); then Generate QR Code says so and Print Form prints nothing.
+    `check_joined.py` (new) checks the structure and runs the PDF's scripts in Node: menu links, Print Form ranges for early,
+    middle and late forms, extra pages in the middle of the PDF, Reset form of one form; `proof_multiqr.py` joined mode
+    follows the new layout. NOT checked: Acrobat Pro and Reader (where `spawn` puts the page, and the field names it gives).

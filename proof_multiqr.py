@@ -95,7 +95,7 @@ const state = (label, text) => {
     if (!m || f.pg === tmpl) continue;
     if (f.value !== "") (rows[(m[1] === P ? "" : m[1]) + m[2]] = rows[(m[1] === P ? "" : m[1]) + m[2]] || {})[m[3]] = f.value;
   }
-  const own = f => f.pg !== tmpl && f.name.indexOf("__qr") >= 0;
+  const own = f => f.pg !== tmpl && f.name.indexOf("__qr") >= 0 && (f.name.startsWith(P) || f.name.indexOf(D.template) >= 0);   // this form's own, not the other forms'
   return {label: label, numPages: pages.length, rows: rows,
           check: global["lcQrCheck" + SFX] ? qc(text) : "",
           last: global["lcLastPage" + SFX] ? global["lcLastPage" + SFX](doc, text) : get("__qr").page, qrPage: get("__qr").page,
@@ -144,10 +144,9 @@ def load_pdf_for_harness(pdf_bytes, joined_code=None):
     pdf = pikepdf.open(io.BytesIO(pdf_bytes))
     fields = []
     if joined_code:
-        tpl = {str(n): p for n, p in zip(*[iter(pdf.Root.Names.Templates.Names)] * 2)}
-        index = {p.objgen: int(n.split("_")[1]) + 1 for n, p in tpl.items() if n.startswith(joined_code + "_") and n[len(joined_code) + 1:].isdigit()}
-        numPages = 1 + len(index)
-        top = [(str(t.T) + ".", list(t.Kids)) for t in pdf.Root.AcroForm.Fields if "/Kids" in t and "/T" in t and str(t.T) not in ("ACCEPT", "OPEN")]
+        index = {p.objgen: i for i, p in enumerate(pdf.pages)}   # every form's pages are ordinary pages, in the PDF all the time
+        numPages = len(pdf.pages)
+        top = [(str(t.T) + ".", list(t.Kids)) for t in pdf.Root.AcroForm.Fields if "/Kids" in t and "/T" in t and str(t.T) != "ACCEPT"]
     else:
         index = {p.objgen: i for i, p in enumerate(pdf.pages)}
         numPages = len(pdf.pages)
@@ -161,7 +160,7 @@ def load_pdf_for_harness(pdf_bytes, joined_code=None):
                    "combobox" if ft == "/Ch" else "text"
             widgets = f.get("/Kids", [])
             page = index.get(widgets[0].P.objgen, -1) if widgets and "/P" in widgets[0] else -1
-            fields.append({"name": prefix + str(f.T), "type": kind, "page": page if prefix in ("", f"{joined_code}.") else -1})
+            fields.append({"name": prefix + str(f.T), "type": kind, "page": page})
             by_name[prefix + str(f.T)] = f
     code = (joined_code + ".") if joined_code else ""
     if joined_code:
@@ -284,7 +283,8 @@ def check_step(st, want, info, block):
         return notes
     n, payload, joined_pdf = st["n"], st["payload"], bool(info["prefix"])
     form_pages = info["numPages"]
-    first_page = 1 if joined_pdf else 0                      # the joined PDF prints from page 1 (page 0 is the menu)
+    # the form's first page: its lowest-numbered field (the joined PDF keeps every form's pages, so it is not always page 1)
+    first_page = min(f["page"] for f in info["fields"] if f["name"].startswith(info["prefix"]) and f["page"] >= 0) if joined_pdf else 0
     if n != want["expect"]:
         notes.append(f"codes {n}, wanted {want['expect']}")
     if st["err"]:

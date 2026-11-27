@@ -8,16 +8,15 @@ Builds each form file (the same way as build.py), then joins them into one PDF:
   - each form, as built on its own (questions, rules, Check form / Reset form, QR code page), plus a
     "Main menu" button on every page (except the extra QR code pages, which have no buttons).
   - bookmarks for every form.
-The menu is the ordinary page 0 and always stays; every form's pages are hidden page templates ("LC_0", "LC_1" ...), and so is
-each form's extra QR code page ("LC_qrx"; Generate QR Code spawns it after the form's QR code page for codes 3 to 16, two per
-page, and deletes the copies it no longer needs; a form needs it only for long answers).
-Clicking a form on the menu (or its bookmark) copies that form's pages in after the menu with Template.spawn, and deletes
-the copies of the form that was open (showForm, in the document script "00 menu"; it asks first, because the open form's
-answers are cleared). The "Main menu" button and bookmark (showMenu) ask the same, then delete the form's pages and clear its
-answers, so the PDF is just the menu page again (if the viewer refuses deletePages it only goes to page 0). The open form's
-code is kept in the hidden field "OPEN". The tick box (field "ACCEPT") is on the menu page. Needs JavaScript on (written
-for the free Acrobat Reader too, but untested there); without JavaScript only the menu page is visible. If the viewer
-refuses a step, the menu shows a message with the step, the error and the viewer's name (failed(), in "00 menu").
+The menu is the ordinary page 0; every form's pages follow it as ordinary pages, always in the PDF, in the order of MENU. Nothing
+is hidden, added or deleted when you switch forms (the free Acrobat Reader has refused hiding and deleting pages), so switching should not fail there.
+Clicking a form on the menu (or its bookmark) runs openForm (document script "00 menu"): if the tick box (field "ACCEPT",
+on the menu page) is off it asks to tick it, else it goes to that form's first page. A form's first page moves when the
+forms before it get extra QR code pages, so it is worked out at the click (the form's QR code page minus the pages in front
+of it). The "Main menu" button and bookmark are a plain jump to page 0 and keep every answer; Reset form clears one form.
+Only a long answer needs pages added or deleted: Generate QR Code with more than 2 codes copies that form's hidden page
+template ("LC_qrx", one per form) right after the form's QR code page with Template.spawn and removes them with deletePages;
+the free Reader may refuse that (untested), and then Generate QR Code says so. Needs JavaScript on for the buttons and checks.
 Each form keeps its own rules and QR code: Check form, Reset form, Generate QR Code and Print Form work on that form
 only (its fields are renamed "LC.applicant_name", "BG.applicant_name" ..., and its scripts are made to match).
 Needs the form files below (in forms/) and the engine files in this folder. No terms and conditions pages: the old form has them
@@ -61,22 +60,27 @@ FUNCTIONS = ("lcRules", "lcDates", "lcPayload", "lcQrMatrix", "lcDrawQr", "lcWor
 # ==================================================================================================================
 # ONE FORM'S SCRIPTS, MADE TO WORK BESIDE THE OTHERS
 # ==================================================================================================================
-def scoped(js, code):
+def scoped(js, code, before_qr):
     """A form's JavaScript, rewritten for the joined PDF: its fields are "CODE.name", its functions "lcRules_CODE"
-    ..., and Reset form clears only this form, and Print Form leaves out the menu (page 0). Only one form's pages follow
-    the menu, so the QR code page (and the extra QR code pages spawned after it) are still the last pages."""
+    ..., Reset form clears only this form, and Print Form prints only this form's pages. Every form's pages are always in
+    the PDF, so a form's first page is not fixed (the extra QR code pages of the forms before it push it down): it is found
+    when the button is pressed, as the form's QR code page minus before_qr (the number of pages in front of that page in
+    the form)."""
     js = js.replace("getField(", 'getField("%s." + ' % code)
     js = js.replace("n = d.getNthFieldName(i);", 'n = d.getNthFieldName(i); if (n.indexOf("%s.") != 0) continue; n = n.slice(%d);' % (code, len(code) + 1))
     js = re.sub(r"\b(%s)\b" % "|".join(FUNCTIONS), lambda m: m.group(1) + "_" + code, js)
-    js = js.replace("this.print(true, 0, ", "this.print(true, 1, ")   # from page 1: the menu is page 0
+    js = js.replace("this.print(true, 0, ", 'this.print(true, this.getField("%s.__qr").page - %d, ' % (code, before_qr))   # from this form's first page
     js = js.replace('getTemplate("qrx")', 'getTemplate("%s_qrx")' % code)   # this form's extra QR code page
+    # an extra QR code page goes right after the QR code page and the extra pages already there, not at the end of the PDF
+    # (Template.spawn with bOverlay false inserts the page BEFORE page nPage)
+    js = js.replace("nPage: d.numPages", 'nPage: d.getField("%s.__qr").page + pages.length + 1' % code)
     js = js.replace("this.resetForm();", 'this.resetForm(["%s"]);' % code)
-    # the hidden __checks calculation (one per form, 13 in all) does nothing unless this form is the open one
-    js = js.replace("/*calc*/", 'if (String(this.getField("OPEN").value) == "%s") ' % code)
+    # the hidden __checks calculation (one per form, 13 in all) does nothing unless the box that changed is on this form
+    js = js.replace("/*calc*/", 'if (!event.source || String(event.source.name).indexOf("%s.") == 0) ' % code)
     return js
 
 
-def rewrite_scripts(pdf, code):
+def rewrite_scripts(pdf, code, before_qr):
     """Every script in one form's PDF (document script, field events, button actions), scoped to the form. Scripts
     sit in actions (dictionaries with /JS), which can be objects of their own or inside other dictionaries."""
     seen = set()
@@ -90,7 +94,7 @@ def rewrite_scripts(pdf, code):
             if isinstance(obj, Dictionary) and Name.JS in obj:
                 js = obj.JS
                 text = js.read_bytes().decode("latin-1") if isinstance(js, pikepdf.Stream) else str(js)
-                new = scoped(text, code)
+                new = scoped(text, code, before_qr)
                 obj.JS = pdf.make_stream(zlib.compress(new.encode("latin-1")), Filter=Name.FlateDecode) if isinstance(js, pikepdf.Stream) else String(new)
             for key in list(obj.keys()):
                 if key not in ("/Parent", "/P", "/Kids") or key == "/Kids":
@@ -135,21 +139,13 @@ def link(page, rect, action):
 
 
 def show(code):
-    """The action that opens one form (showForm is in the document script "00 menu")."""
-    return Dictionary(S=Name.JavaScript, JS=String('showForm(this, "%s");' % code))
+    """The action that goes to one form (openForm is in the document script "00 menu")."""
+    return Dictionary(S=Name.JavaScript, JS=String('openForm(this, "%s");' % code))
 
 
-def to_menu():
-    """The action of every Main menu button and the Main menu bookmark."""
-    return Dictionary(S=Name.JavaScript, JS=String("showMenu(this);"))
-
-
-def open_field(out, page):
-    """The hidden read-only text field "OPEN": the code of the form whose pages are open (empty = none)."""
-    field = out.make_indirect(Dictionary(Type=Name.Annot, Subtype=Name.Widget, FT=Name.Tx, T=String("OPEN"), V=String(""),
-                                         Rect=[0, 0, 1, 1], F=2, Ff=1, P=page.obj, DA=String("/Helv 0 Tf 0 g")))
-    page.obj.Annots.append(field)
-    return field
+def to_menu(menu_page):
+    """The action of every Main menu button and the Main menu bookmark: an ordinary jump to page 0 (no JavaScript)."""
+    return Dictionary(S=Name.GoTo, D=Array([menu_page.obj, Name.Fit]))
 
 
 def tick_box(out, page, rect):
@@ -172,83 +168,26 @@ def tick_box(out, page, rect):
     return field
 
 
-# The document script "00 menu". The menu is the ordinary page 0 and always stays. Each form's pages are hidden page
-# templates CODE_0, CODE_1 ... showForm copies them in with Template.spawn (bRename false: the fields keep their names,
-# "LC.applicant_name") after the menu page, and deletes the copies of the form that was open before. Which form is open
-# is kept in the hidden read-only field "OPEN" (the form's code, or empty), so it is still right after the PDF is saved
-# and opened again. showMenu asks, then deletes the open form's pages and clears its answers, so the PDF is the menu page
-# again (if the viewer refuses deletePages it just goes to page 0 and the form stays). Spawn drops the click action of the
-# tick boxes, radio buttons and lists (setAction cannot put it back: measured; a field-level /V action and a direct call of
-# the rules both risk re-entry, "too much recursion"). The hidden __checks calculation, which spawn keeps (it only runs while OPEN is its form), runs the rules
-# after every change, and showForm asks for one calculation (calculateNow) once the pages are in. Going to a page (goPage) never shows an error: if the viewer refuses it inside the click it is retried
-# 100 ms later, else the user just stays where they are. The free Acrobat Reader may refuse spawn or deletePages (not tested): failed() names the step.
-MENU_JS = """var FORMS = __FORMS__;
+# The document script "00 menu". Every form's pages are ordinary pages, always in the PDF, in MENU order after the menu page
+# (page 0). openForm (a click on the menu or a bookmark) checks the terms tick box (field "ACCEPT"), then goes to the form's
+# first page. That page number is not fixed: a form's extra QR code pages are put in right after its QR code page, which
+# pushes every later form down. So it is found when you click: the form's QR code page ("CODE.__qr") minus the number of
+# pages in front of it in that form (BEFORE_QR). Nothing here adds, deletes, hides or shows a page (the free Acrobat Reader
+# refuses some of that); only the extra QR code pages of a long answer need Template.spawn / deletePages (acrobat_js.py).
+# Main menu is a plain jump to page 0 and needs no script.
+MENU_JS = """var BEFORE_QR = __BEFORE_QR__;
 var TITLES = __TITLES__;
-function openForm(d) {
-  var f = d.getField("OPEN");
-  return f ? String(f.value) : "";
-}
-function showForm(d, code) {
-  var step = "start";
+function openForm(d, code) {
   try {
     if (d.getField("ACCEPT").value == "Off") {
       app.alert("Please tick the box to agree to the Bank's terms and conditions before opening a form.", 3);
       return;
     }
-    var was = openForm(d);
-    if (was == code && d.numPages > 1) { goPage(d, 1); return; }
-    step = "ask";
-    if (was != "" && d.numPages > 1 && app.alert("Open " + TITLES[code] + "? The answers in " + TITLES[was] + " will be cleared.", 2, 2) != 4) return;
-    step = "deletePages";
-    if (d.numPages > 1) d.deletePages({nStart: 1, nEnd: d.numPages - 1});
-    step = "OPEN";
-    d.getField("OPEN").value = "";   // the pages are gone: the old form is not open any more, whatever happens next
-    if (was != "") {
-      try { d.resetForm([was]); } catch (e) { failed(e, "resetForm"); }
-    }
-    for (var k = 0; k < FORMS[code]; k++) {
-      step = "spawn " + code + "_" + k;
-      d.getTemplate(code + "_" + k).spawn({nPage: d.numPages, bRename: false, bOverlay: false});
-    }
-    step = "OPEN";
-    d.getField("OPEN").value = code;
-    // the copies lose their click action; the hidden __checks calculation still runs the rules, so ask for one calculation
-    // (never call the rules here: they set fields, which fires the calculation, which calls the rules again: too much recursion)
-    try { d.calculateNow(); } catch (e) {}
-    goPage(d, 1);
-  } catch (e) { failed(e, step); }
-}
-function showMenu(d) {
-  var step = "main menu";
-  try {
-    var was = openForm(d);
-    if (was != "" && d.numPages > 1) {
-      if (app.alert("Go back to the main menu? The answers in " + TITLES[was] + " will be cleared.", 2, 2) != 4) return;
-      try { d.deletePages({nStart: 1, nEnd: d.numPages - 1}); } catch (e) { goPage(d, 0); return; }   // viewer refuses: just go to the menu, the form stays
-      d.getField("OPEN").value = "";
-      try { d.resetForm([was]); } catch (e) { failed(e, "resetForm"); }
-    }
-    goPage(d, 0);
-  } catch (e) { failed(e, step); }
-}
-// Going to a page is the last step and never an error: a viewer may refuse it inside the click that just added or
-// deleted pages (InvalidSetError), so it is tried again a moment later; if that fails too, the user stays where they are.
-var GO = {d: null, n: 0};
-function goPage(d, n) {
-  try { d.pageNum = n; } catch (e) {
-    GO.d = d; GO.n = n;
-    try { app.setTimeOut("goLater()", 100); } catch (e2) {}
+    d.pageNum = d.getField(code + ".__qr").page - BEFORE_QR[code];
+  } catch (e) {
+    app.alert("This PDF viewer would not go to " + TITLES[code] + " (" + e.name + ": " + e.message + "). Viewer: " + app.viewerType + " " +
+              app.viewerVersion + ". Scroll down to it instead: the forms follow the menu page in the order listed there.", 1);
   }
-}
-function goLater() {
-  try { GO.d.pageNum = GO.n; } catch (e) {}
-}
-function failed(e, step) {
-  var viewer = app.viewerType + " " + app.viewerVersion;
-  var why = (step.indexOf("spawn") == 0 || step == "deletePages") && app.viewerType == "Reader"
-    ? "The free Acrobat Reader may not let a form add or delete pages: try Adobe Acrobat Pro or Standard."
-    : "This looks like a problem in the form's script: please send this message to the form's developer.";
-  app.alert("This PDF viewer would not open the form (step " + step + ", " + e.name + ": " + e.message + "). Viewer: " + viewer + ". " + why, 1);
 }
 """
 
@@ -269,7 +208,10 @@ def main():
             src = pikepdf.open(io.BytesIO(build(spec.FORM, spec.DEFAULTS)))
             first = len(out.pages)
             last = first + len(src.pages) - 1
-            rewrite_scripts(src, code)
+            qr = next(f for f in src.Root.AcroForm.Fields if str(f.T) == "__qr")
+            before_qr = len(src.pages) - 1   # the QR code page is the form's last page (checked next)
+            assert (qr.get("/P") or qr.Kids[0].P).objgen == src.pages[-1].objgen, f"{code}: the QR code page is not the last page"
+            rewrite_scripts(src, code, before_qr)
             # the form's fields go under one parent field named after the form ("BG" -> "BG.applicant_name")
             parent = src.make_indirect(Dictionary(T=String(code), Kids=Array()))
             for f in src.Root.AcroForm.Fields:
@@ -289,18 +231,14 @@ def main():
                                                    text_op("Main menu", x + (64 - width("Main menu", 8)) / 2, H - 21.5, 8, False, (1, 1, 1))).encode("cp1252")))
                 if Name.F1 not in page.Resources.Font:
                     page.Resources.Font.F1 = out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding))
-                link(page, [x, H - 25, x + 64, H - 12], to_menu())
-                for a in page.obj.Annots:   # spawn drops GoTo links: make them JavaScript ("Next page" = pageNum += 1)
-                    if a.get(Name.Subtype) == Name.Link and a.get(Name.A, {}).get(Name.S) == Name.GoTo:
-                        gap = [p.objgen for p in out.pages[first:last + 1]].index(a.A.D[0].objgen) - (i - first)
-                        a.A = Dictionary(S=Name.JavaScript, JS=String("this.pageNum %s= %d;" % ("+" if gap > 0 else "-", abs(gap))))
+                link(page, [x, H - 25, x + 64, H - 12], to_menu(menu_page))
             title = spec.FORM["title"]
             entries.append((group, title, re.search(r"[A-Z]+-\d+", spec.FORM["formCode"]).group(0), code))
-            pages_of[code] = [out.pages[i].obj for i in range(first, last + 1)]
+            pages_of[code] = (first, before_qr)
             qr_extra[code] = out.copy_foreign(extra_page)   # the same copy the fields' widgets point to (see the assert at the end)
 
     # the menu page
-    ops = header("Trade Application Forms") + [text_op("Please select the form that you require. The form opens after this page; Main menu brings you back here and clears the form.", M, H - 76, 9)]
+    ops = header("Trade Application Forms") + [text_op("Please select the form that you require. Every form is kept in this PDF after this page, with its own answers; Main menu brings you back here.", M, H - 76, 9)]
     terms = wrap(TERMS_TEXT, 9, W - 2 * M - 24)
     for k, ln in enumerate(terms):
         ops.append(text_op(ln, M + 24, H - 98 - k * 11, 9))
@@ -319,7 +257,7 @@ def main():
             links.append(([M + 14, y - 4 - 11.5 * (len(lines) - 1), W - M, y + 11], code))
             y -= 17 + 11.5 * (len(lines) - 1)
         y -= 10
-    ops.append(text_op("Open this PDF in Adobe Acrobat or Reader with JavaScript on: the forms open, and are checked, only with JavaScript.", M, 50, 8, False, (0.35, 0.35, 0.35)))
+    ops.append(text_op("Open this PDF in Adobe Acrobat or Reader with JavaScript on: the forms are checked, and a click here goes to a form, only with JavaScript.", M, 50, 8, False, (0.35, 0.35, 0.35)))
     menu_page.obj.Contents = out.make_stream(zlib.compress(" ".join(ops).encode("cp1252", "replace")), Filter=Name.FlateDecode)
     menu_page.obj.Resources = Dictionary(Font=Dictionary(
         F1=out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding)),
@@ -327,29 +265,22 @@ def main():
     for rect, code in links:
         link(menu_page, rect, show(code))
     accept = tick_box(out, menu_page, box_rect)
-    opened = open_field(out, menu_page)
     assert y > 70, "menu text runs into the footer"
 
-    # every form's pages become hidden page templates: taken out of the page list, named in /Templates
+    # each form's extra QR code page is a hidden page template ("LC_qrx"): Generate QR Code copies it in only when needed
     templates = Array()
-    for name, page in sorted([(f"{code}_{k}", page) for code, pages in pages_of.items() for k, page in enumerate(pages)] +
-                             [(f"{code}_qrx", page) for code, page in qr_extra.items()]):
+    for name, page in sorted((f"{code}_qrx", page) for code, page in qr_extra.items()):
         templates.append(String(name))   # a name tree: names in sorted order
         templates.append(page)
-    del out.pages[1:]   # the menu stays: it is the one page at open
-    for page in pages_of.values():
-        for p in page:
-            del p.Parent
-            p.Type = Name.Template   # a hidden template's page is /Type /Template (PDF spec, "Named pages")
 
     # one AcroForm for all, every form's document script, bookmarks
     dr = Dictionary(Font=Dictionary(
         Helv=out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.Helvetica, Encoding=Name.WinAnsiEncoding)),
         ZaDb=out.make_indirect(Dictionary(Type=Name.Font, Subtype=Name.Type1, BaseFont=Name.ZapfDingbats))))
     dr.Font.Helvetica = dr.Font.Helv
-    out.Root.AcroForm = out.make_indirect(Dictionary(Fields=Array(fields + [accept, opened]), DR=dr, DA=String("/Helv 0 Tf 0 g"), CO=Array(recalcs)))
+    out.Root.AcroForm = out.make_indirect(Dictionary(Fields=Array(fields + [accept]), DR=dr, DA=String("/Helv 0 Tf 0 g"), CO=Array(recalcs)))
     scripts.append(("00 menu", out.make_indirect(Dictionary(S=Name.JavaScript, JS=String(
-        MENU_JS.replace("__FORMS__", json.dumps({c: len(p) for c, p in pages_of.items()}))
+        MENU_JS.replace("__BEFORE_QR__", json.dumps({c: n for c, (_, n) in pages_of.items()}))
         .replace("__TITLES__", json.dumps({c: t for _, t, _, c in entries})))))))
     names = Array()
     for name, action in sorted(scripts):
@@ -357,7 +288,7 @@ def main():
         names.append(action)
     out.Root.Names = Dictionary(JavaScript=Dictionary(Names=names), Templates=Dictionary(Names=templates))
     with out.open_outline() as o:
-        o.root.append(pikepdf.OutlineItem("Main menu", action=to_menu()))
+        o.root.append(pikepdf.OutlineItem("Main menu", 0))
         for group, title, form_code, code in entries:
             o.root.append(pikepdf.OutlineItem(title, action=show(code)))
     out.docinfo[Name.Title] = String("Trade Application Forms")
@@ -368,8 +299,9 @@ def main():
     problems = check.check_pdf_syntax()
     assert not problems, problems
     tops = [str(f.T) for f in check.Root.AcroForm.Fields]
-    assert len(tops) == len(set(tops)) == len(entries) + 2 and "ACCEPT" in tops and "OPEN" in tops, tops
-    assert len(check.pages) == 1 and len(check.Root.Names.Templates.Names) == 2 * (sum(map(len, pages_of.values())) + len(entries))
+    assert len(tops) == len(set(tops)) == len(entries) + 1 and "ACCEPT" in tops and "OPEN" not in tops, tops
+    assert len(check.pages) == 1 + sum(before + 1 for _, before in pages_of.values()), "a form's pages are missing"
+    assert len(check.Root.Names.Templates.Names) == 2 * len(entries)
     names = {str(n): p for n, p in zip(*[iter(check.Root.Names.Templates.Names)] * 2)}
     for entry in entries:   # each form's extra QR code page is its template, and its QR rows sit on that very page
         code = entry[3]
@@ -377,13 +309,11 @@ def main():
         row = next(k for k in row if str(k.T) == "__qrx_1_5").Kids[0]
         assert row.P.objgen == names[f"{code}_qrx"].objgen, f"{code}: extra QR rows are not on the template"
     assert Name.Pages not in check.Root.Names
-    open_w = [a for a in check.pages[0].obj.Annots if str(a.get("/T")) == "OPEN"]
-    assert len(open_w) == 1 and open_w[0].F == 2 and open_w[0].Ff == 1, "OPEN field wrong"
     js = next(str(x.JS) for n, x in zip(*[iter(check.Root.Names.JavaScript.Names)] * 2) if str(n) == "00 menu")
-    assert "__FORMS__" not in js and "__TITLES__" not in js and "spawn" in js
+    assert "__BEFORE_QR__" not in js and "__TITLES__" not in js and "spawn" not in js
     assert any(str(a.get("/T")) == "ACCEPT" for a in check.pages[0].obj.Annots), "tick box missing"
     print(f"Wrote out/Trade-Application-Forms.pdf: menu page + {len(entries)} forms "
-          f"({sum(map(len, pages_of.values()))} pages, hidden until chosen)")
+          f"({sum(n + 1 for _, n in pages_of.values())} form pages, all kept in the PDF)")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ lc-form/
   forms/lc_pipe_form.py <- the LC form again, but its QR code holds the old smart form's pipe-delimited text (Form LC-01P)
   build.py          <- RUN THIS:  python build.py lc_form.py
   build_all.py      <- or this, for every form in one PDF with a main menu:  python build_all.py
-                       (tick the terms box, click a form on the menu and that form's pages open after the menu; Main menu asks, then clears the form and shows just the menu again; needs JavaScript on)
+                       (tick the terms box and click a form on the menu to go to it; every form's pages stay in the PDF after the menu, Main menu jumps back to page 1; needs JavaScript on)
   layout.py         \
   pdf_writer.py      > the engine: the same for every form. Never edit these.
   acrobat_js.py     /
@@ -151,7 +151,7 @@ Moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
 | `PROBLEM IN acrobat_js.py ... characters that break Acrobat` | The file changed while being copied. Copy it again with Download raw file. |
 | `The library pikepdf is not installed` | Run the setup step again: `pip install -r requirements.txt`. |
 | In Acrobat: no calendars, red boxes never turn black, Check form says the checks did not start | JavaScript is off in Acrobat: yellow bar > Options > Enable JavaScript, or Preferences > JavaScript > Enable Acrobat JavaScript. Then close and reopen the PDF. |
-| In the one-PDF menu (`build_all.py`): a message says "This PDF viewer would not open the form" | The viewer refused a step. The message names the step (e.g. `spawn` or `deletePages`), the error and the viewer; send the message text to a developer. Open the PDF in Adobe Acrobat Pro or Standard meanwhile. |
+| In the one-PDF menu (`build_all.py`): a message says "This PDF viewer would not go to ..." | The viewer refused to change page. Scroll down to the form instead (the forms follow the menu page in the order listed); send the message text to a developer. |
 | Clicking from one box to the next feels slow in Acrobat | The form re-checks only the questions the box you left affects. If it is still slow, send the form name to a developer. |
 | A browser shows the form but nothing is checked | Browsers don't run the form's checks. Download it and open it in Acrobat or Reader. |
 
