@@ -90,6 +90,7 @@ text("applicant_name", "Applicant name", required=True, max=35),
 | Allow digits only / an amount | Add `format="number"` or `format="amount"` (also `phone`, `account`) |
 | Limit the length | Add or change `max=35` |
 | Make a section the whole width / half | Add `width="full"` or `width="half"` to its `section(...)`. Two half sections in a row sit side by side. Without `width` the build decides |
+| Make a section taller (blank space at the bottom) | Add `min_height=200` to its `section(...)` (points). The box is at least that tall; if the questions need more room, they win. Leave it out to fit the questions |
 | Start a section on a new page | Add `new_page=True` to its `section(...)` |
 | Make a question take the whole row | Add `cols=12` (the row has 12 columns: `cols=6` = half, `cols=4` = a third). Without `cols` the build picks a width from the label and `max` |
 | Make a paragraph box taller or shorter | Add `height=80` to its `long(...)` line (points; the default is 50) |

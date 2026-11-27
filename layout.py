@@ -30,6 +30,7 @@ PAGE_WIDTH = 595.28
 PAGE_HEIGHT = 841.89
 MARGIN = 42                 # left and right margin
 BOTTOM = 39                 # start a new page when content would go below this line (the footer sits under it)
+PAGE_ROOM = PAGE_HEIGHT - 34 - BOTTOM   # the room for content on a page after its header (new_page starts at PAGE_HEIGHT - 34)
 
 # ---- Colours (red, green, blue; each 0 to 1)
 RED = (0.8, 0, 0)           # mandatory boxes and the red * markers
@@ -612,8 +613,9 @@ class Layout:
     def section_height(self, section, area):
         note = self.note_lines(section, area)
         rows = sum(self.row_height(r, area) + 4 for r in self.rows_of(section, area["cols"]))
-        return BAND + 4 + len(note) * 9 + (4 if note else 0) + rows + (BUTTON_ROW if section.get("buttons") else 0) + \
+        content = BAND + 4 + len(note) * 9 + (4 if note else 0) + rows + (BUTTON_ROW if section.get("buttons") else 0) + \
             (SIGN_OFF if section.get("signoff") else 0) + 1
+        return max(content, section.get("min_height") or 0)   # min_height: at least this tall; the content wins if it needs more
 
     # =========================================================================================== one section
     def draw_section(self, section, index, area, may_break, bottom=None):
@@ -624,10 +626,11 @@ class Layout:
         inner_x, inner_w, _ = self.inside(area)
         # Start on a new page if not even the heading and first row fit. The bank-use panel and the declaration are
         # kept whole on one page.
-        first_part = whole if section.get("signoff") or section.get("bankOnly") else BAND + 12 + (self.row_height(rows[0], area) if rows else 0)
+        # A section with a min_height is kept whole too, so it moves to the next page when it no longer fits.
+        first_part = whole if section.get("signoff") or section.get("bankOnly") or section.get("min_height") else BAND + 12 + (self.row_height(rows[0], area) if rows else 0)
         if may_break and self.top - first_part < BOTTOM:
             self.new_page()
-        box_top = self.top
+        box_top, first_page = self.top, self.page.number
 
         def outline():
             self.rect(area["x"], self.top, area["w"], box_top - self.top, border=INK, border_width=0.6)
@@ -686,6 +689,8 @@ class Layout:
 
         # The approved 4-page copy ends the Drafts section (the one with 13.2) 3 points higher than the others.
         self.top -= -2 if any(q.get("beside") for q in section["fields"]) else 1
+        if section.get("min_height") and self.page.number == first_page:   # blank space at the bottom of the box
+            self.top = min(self.top, box_top - section["min_height"])
         if bottom is not None:
             self.top = min(self.top, bottom)
         outline()

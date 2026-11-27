@@ -73,6 +73,9 @@ import sys
 #     width="half"                        half the page; two half sections in a row sit side by side
 #                                         (leave width out: the build puts two short, similar sections side by side)
 #     new_page=True                       starts on a new page
+#     min_height=200                      the section's box is at least this many points tall (blank space at the bottom
+#                                         for writing on paper); leave it out to fit the questions. If the questions need
+#                                         more room they win. Up to a page's height (about 769 points)
 #     buttons=["check-form", "print-form"]  a row of buttons at the bottom right of the section, each one of:
 #                                         "check-form" (Check form), "reset-form" (Reset form),
 #                                         "generate-qr" (Generate QR Code), "print-form" (Print Form).
@@ -196,7 +199,7 @@ def check_pipe(form, questions, stop):
 # ---- check_form: explains mistakes in a form file before anything is built -------------------------------------
 KINDS = ("text", "long", "date", "radio", "checks", "check", "select")
 QUESTION_OPTIONS = {"id", "label", "kind", "options", "required", "requiredIf", "activeIf", "max", "format", "half", "beside", "cols", "words", "height"}
-SECTION_OPTIONS = {"title", "fields", "note", "bankOnly", "signoff", "width", "new_page", "buttons"}
+SECTION_OPTIONS = {"title", "fields", "note", "bankOnly", "signoff", "width", "new_page", "buttons", "min_height"}
 BUTTON_NAMES = ("check-form", "reset-form", "generate-qr", "print-form")
 
 
@@ -225,6 +228,9 @@ def check_form(form, defaults, formats):
         buttons = section.get("buttons")
         if buttons is not None and (not isinstance(buttons, list) or any(b not in BUTTON_NAMES for b in buttons) or len(set(buttons)) < len(buttons)):
             stop(f'{where}: buttons must be a list of different ones from {", ".join(BUTTON_NAMES)}, like buttons=["check-form"].')
+        mh = section.get("min_height")
+        if mh is not None and (isinstance(mh, bool) or not isinstance(mh, (int, float)) or not 0 < mh <= PAGE_ROOM):
+            stop(f"{where}: min_height must be a number of points above 0 and no taller than a page ({int(PAGE_ROOM)}), like min_height=200.")
         if section.get("width") == "half" and section.get("signoff"):
             stop(f'{where}: a signoff section needs the whole width (its signature, date and stamp lines). Remove width="half".')
         for qi, q in enumerate(section["fields"], 1):
@@ -285,7 +291,7 @@ def check_form(form, defaults, formats):
 sys.dont_write_bytecode = True   # always read the files fresh (no cached copy of an older version)
 
 try:
-    from layout import FORMATS                 # noqa: E402
+    from layout import FORMATS, PAGE_ROOM              # noqa: E402
     from pdf_writer import build, self_check   # noqa: E402
 except (SyntaxError, ImportError) as e:
     if getattr(e, "name", None) in ("pikepdf", "lxml", "PIL", "packaging"):
