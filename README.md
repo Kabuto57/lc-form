@@ -1029,7 +1029,7 @@ layout: box widths are worked out from the label and `max`.
     switching forms failed with "step deletePages, RaiseError: One or more pages are in use and could not be deleted"; the
     Reader refused, as reported, to hide a template (24 Nov, item 34) and to delete the open form's pages (27 Nov); whether it also refuses to add pages is not known (items 28 to 35). `build_all.py` now goes back to
     the item 25 layout, without any of that: the menu is page 0 and every form's pages follow it as ordinary pages, always in
-    the PDF (39 pages), in menu order. Gone: the form page templates, `Template.spawn` / `deletePages` for switching, the
+    the PDF (the menu page plus every form's pages: 40 with the 5-page LC form), in menu order. Gone: the form page templates, `Template.spawn` / `deletePages` for switching, the
     `showForm` / `showMenu` / `goPage` / `failed` functions and the hidden `OPEN` field. A click on a form (or its bookmark)
     runs `openForm`: if the terms tick box (`ACCEPT`) is off it asks to tick it, else it goes to the form's first page (worked
     out at the click, as the form's QR code page minus the pages in front of it, because the extra QR code pages of the
