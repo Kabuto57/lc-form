@@ -61,7 +61,7 @@ the JavaScript inside the PDF, the QR code, testing and history.
 - **A form file plus 4 engine files build the PDF:** the form (`forms/lc_form.py`, the only one you edit) and four
   engine files that are the same for every form (`build.py`, `layout.py`, `pdf_writer.py`, `acrobat_js.py`). One
   command builds the PDF and checks it.
-- **Folders:** the engine files at the top and every form file in `forms/`. The QR reader, the QR vs AI benchmark and the smart-form tools were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
+- **Folders:** the engine files at the top and every form file in `forms/`. The QR reader, the QR vs AI benchmark and the smart-form tools were moved out of this repo to `~/Documents/lc-form-extras` (not needed to build), and so were the check scripts (`~/Documents/lc-form-extras/checks/`).
 
 The build checks twice and stops with the reason, saving nothing, if anything is wrong:
 - **before building**, it checks the form file for mistakes (a misspelt option, a rule that names a question that
@@ -124,11 +124,10 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 |---|---|---|
 | `forms/lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and one build setting (`PDF_NAME`). | Anyone changing the form |
 | `forms/lc_pipe_form.py` | **The LC form with the old smart form's pipe-delimited QR text** (Form LC-01P): imports `lc_form.py`, adds `FORM["qrFormat"] = "pipe"` and the 62-position table `FORM["pipe"]`; `IN_MENU = False` (not in `build_all.py`). See "The pipe-format form" below. | Anyone changing the pipe format |
-| `check_pipe.py`, `check_pipe_mock.js` | The oracle test of the pipe form: its records against the old form's own barcode code (`python check_pipe.py [--decode]`). Not needed to build. | Whoever changes `lc_pipe_form.py` or `PIPE_JS` |
 | `forms/example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
 | `forms/eblc_form.py` | **EBLC** (Handling / Financing of Documents under Export Documentary Credit, Form EBLC-01), redrawn from the old smart form with its rules. | Anyone changing that form |
 | `forms/`: `lc_amendment_form.py`, `obc_form.py`, `import_financing_form.py`, `export_financing_form.py`, `bg_form.py`, `sblc_form.py`, `bg_amendment_form.py`, `sblc_amendment_form.py`, `bill_of_exchange_form.py`, `bill_of_exchange_eblc_form.py`, `bill_of_exchange_obc_form.py` | **The other trade forms** of the old smart form (LC amendment, export collection, import / export financing, banker's guarantee, standby LC, both amendments, the three bills of exchange), each redrawn in this project's look with the old form's questions, wording and rules. Build each like the LC form: `python build.py bg_form.py`. They use `lc_form.py`'s currency and country lists, so keep them all in `forms/`. | Anyone changing those forms |
-| `proof_multiqr.py` | Proof that Generate QR Code makes as many codes as the answers need (`python proof_multiqr.py`): runs the form's own script under Node with a stand-in for Acrobat and decodes every code with zxing-cpp (a test tool, not in `requirements.txt`). See "Testing the QR codes outside Acrobat" below. | After changing `lcPayload`, `lcDrawQr` or the QR pages |
+| (not in the repo) check scripts | `proof_multiqr.py`, `check_pipe.py` (+ `check_pipe_mock.cjs`), `check_min_height.py`, `check_joined.py` live in `~/Documents/lc-form-extras/checks/`, not needed to build; run them from an lc-form checkout (see "Testing the QR codes outside Acrobat" below). | After changing the QR code scripts, the pipe form, `min_height` or `build_all.py` |
 | `build_all.py` | **Builds the whole smart form as one PDF** (`python build_all.py` -> `out/Trade-Application-Forms.pdf`): a main menu page (Import / Export / Loans / Guarantees) with a terms tick box (wording: `TERMS_TEXT` at the top of the file); tick it and click a form and you go to that form's first page. Every form's pages are ordinary pages that stay in the PDF, one form after another in menu order, so nothing is hidden, added or deleted when you switch forms (reported for the free Acrobat Reader: 24 Nov hiding, 27 Nov deleting pages); answers are kept per form, and the Main menu button on every page of a form (not the extra QR code pages) and the bookmark are a plain jump to page 0; bookmarks. Only Generate QR Code with more than 2 codes adds pages (copied right after that form's QR code page). Needs JavaScript on for the tick box check, the buttons and the checks. Each form keeps its own rules, Check form, Reset form and QR code (its fields are renamed `LC.applicant_name`, `BG.applicant_name` ...). | To build the full PDF |
 | `build.py` | **Run this.** Section 1: the question helpers and every option a question can have, and `check_form`, which explains mistakes in a form file. Section 2: loads a form file, checks it, builds, checks the PDF, saves it in `out/`. | To look up an option |
 | `layout.py` | Step 1: where every section, question and box goes. Also the settings (section 1: page size, colours, text sizes, spacing, answer formats), text helpers, the rules ("mandatory now?") and Adobe's Helvetica letter widths. | To change the look of every form |
@@ -596,6 +595,8 @@ The bank scans the printed codes with a QR reader and gets the JSON.
 
 ### Testing the QR codes outside Acrobat
 
+The check scripts are no longer in this repo: they are in `~/Documents/lc-form-extras/checks/` (see change-log item 48). Run them from an lc-form checkout, e.g. `cd ~/Documents/lc-form && python ~/Documents/lc-form-extras/checks/proof_multiqr.py`.
+
 `python proof_multiqr.py` (needs `node`, and `zxing-cpp` and Pillow in the Python that runs it; zxing-cpp is a test tool and
 is not in `requirements.txt`). Build first (`python build_all.py` too, to test the joined PDF). It takes the form's own
 document and button scripts out of the built PDF, runs them under Node with a small stand-in for Acrobat's document (fields,
@@ -676,8 +677,8 @@ encoded in 1_16 / 1_21. Not reproduced because the form makes the answer mandato
 reused the beneficiary's name), a blank quantity next to a `0` ("IN null COPIES"), a `~` in long text (the old code treated it as
 Enter; `~` is not an allowed character).
 
-**The test (`check_pipe.py`).** `python check_pipe.py` builds the PDF and runs its own JavaScript in node against a minimal fake of
-Acrobat's document (`check_pipe_mock.js`), and runs the **old form's own barcode code** (`tools/run_lc_barcode.mjs` of the
+**The test (`check_pipe.py`, in `~/Documents/lc-form-extras/checks/`; run from an lc-form checkout).** `python check_pipe.py` builds the PDF and runs its own JavaScript in node against a minimal fake of
+Acrobat's document (`check_pipe_mock.cjs`), and runs the **old form's own barcode code** (`tools/run_lc_barcode.mjs` of the
 smart-form extract; set `SMARTFORM_EXTRACT` if it is not in `~/Documents/trade-smartform-extract`) on the same answers, translated
 to the old form's field paths by a separate table in the test. The 4 records must be byte-identical: for the golden sample of the
 extract, then for 300 random valid answer sets (all rules of the form respected; empty optionals, 1 to 3 line addresses, long text
@@ -1046,3 +1047,7 @@ layout: box widths are worked out from the label and `max`.
     `check_joined.py` (new) checks which forms' rules run for a source box of the same form or another form, and for no source on a form page, an extra QR page and the menu page; it also checks the structure and runs the PDF's scripts in Node: menu links, Print Form ranges for early,
     middle and late forms, extra pages in the middle of the PDF, Reset form of one form; `proof_multiqr.py` joined mode
     follows the new layout. NOT checked: Acrobat Pro and Reader (where `spawn` puts the page, and the field names it gives).
+48. **The check scripts moved out of the repo.** `proof_multiqr.py`, `check_pipe.py` (with `check_pipe_mock.cjs`), `check_min_height.py` and
+    `check_joined.py` are not needed to build, so they now live in `~/Documents/lc-form-extras/checks/` (the items above still name them as they
+    were when written). Each expects to be run from inside an lc-form checkout (or with `LC_FORM=<checkout folder>`):
+    `cd ~/Documents/lc-form && python ~/Documents/lc-form-extras/checks/check_pipe.py`. `check_joined.py` needs `python build_all.py` first.

@@ -17,7 +17,7 @@ lc-form/
   pdf_writer.py      > the engine: the same for every form. Never edit these.
   acrobat_js.py     /
   out/              <- the PDF appears here
-  (QR reader, benchmark and tools: moved out of this repo to ~/Documents/lc-form-extras, not needed to build)
+  (QR reader, benchmark, tools and check scripts: moved out of this repo to ~/Documents/lc-form-extras, not needed to build)
   GUIDE.md            this guide
   README.md           the full reference (rules, QR codes, security, history)
   requirements.txt    the library to install (pikepdf)
@@ -136,7 +136,7 @@ separated by `|`, in fixed positions) instead of the JSON. It is not in the main
 is the table `PIPE` in `forms/lc_pipe_form.py` (one line per position, 62 lines, named `1_01` ... `4_03` as in the old layout):
 to move a question or change a code, change its line. Questions the old format never carried (contact details, financing, the
 4th address line ...) are not in the QR code; the printed form still shows them. Test it against the old form's own code with
-`python check_pipe.py` (needs `node` and the smart-form extract; details in README.md, "The pipe-format form").
+`check_pipe.py` (moved out of this repo to `~/Documents/lc-form-extras/checks/`; needs `node` and the smart-form extract; details in README.md, "The pipe-format form").
 
 ## 4. Read a filled-in form's QR code(s)
 

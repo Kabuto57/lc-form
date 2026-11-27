@@ -15,9 +15,9 @@ THE FILES THAT BUILD A FORM (the engine files together in one folder, the form f
                     form file), once per change, and skips writing boxes whose look is unchanged. It is written to be read:
                     plain names, one statement per line, and a comment on every function and every rule.
 You only ever edit form files. The other four are the same for every form.
-    proof_multiqr.py  Not part of the build: after changing the QR code scripts, run it to prove 1 to 16 codes decode (README).
     forms/lc_pipe_form.py is the LC form again with the old smart form's pipe-delimited text in the QR code (FORM["qrFormat"] = "pipe"
-                    and FORM["pipe"], the position table; IN_MENU = False keeps it out of build_all.py). check_pipe.py tests it.
+                    and FORM["pipe"], the position table; IN_MENU = False keeps it out of build_all.py). Its test, check_pipe.py, and the other check scripts live in
+                    ~/Documents/lc-form-extras/checks (not needed to build; README, change-log item 48).
 
 WHAT A BUILD DOES
     1. Reads the form file and checks it for mistakes (a misspelt option, a rule naming a question that doesn't
