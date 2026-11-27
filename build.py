@@ -75,7 +75,9 @@ import sys
 #     new_page=True                       starts on a new page
 #     min_height=200                      the section's box is at least this many points tall (blank space at the bottom
 #                                         for writing on paper); leave it out to fit the questions. If the questions need
-#                                         more room they win. Up to a page's height (about 769 points)
+#                                         more room they win. A section with no width setting that is 300 points
+#                                         tall or more no longer pairs side by side: it goes full width.
+#                                         Up to a page's height (768.89 points)
 #     buttons=["check-form", "print-form"]  a row of buttons at the bottom right of the section, each one of:
 #                                         "check-form" (Check form), "reset-form" (Reset form),
 #                                         "generate-qr" (Generate QR Code), "print-form" (Print Form).
@@ -230,7 +232,7 @@ def check_form(form, defaults, formats):
             stop(f'{where}: buttons must be a list of different ones from {", ".join(BUTTON_NAMES)}, like buttons=["check-form"].')
         mh = section.get("min_height")
         if mh is not None and (isinstance(mh, bool) or not isinstance(mh, (int, float)) or not 0 < mh <= PAGE_ROOM):
-            stop(f"{where}: min_height must be a number of points above 0 and no taller than a page ({int(PAGE_ROOM)}), like min_height=200.")
+            stop(f"{where}: min_height must be a number of points above 0 and no taller than a page ({PAGE_ROOM:.2f}), like min_height=200.")
         if section.get("width") == "half" and section.get("signoff"):
             stop(f'{where}: a signoff section needs the whole width (its signature, date and stamp lines). Remove width="half".')
         for qi, q in enumerate(section["fields"], 1):

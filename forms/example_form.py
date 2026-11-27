@@ -17,6 +17,7 @@ WHAT YOU CAN CUSTOMISE (all in this file; every option is also listed in build.p
                           note="..."        text under the heading
                           bankOnly=True     shaded "For Bank Use Only" section
                           signoff=True      signature, date and company stamp lines (always the whole width)
+                          min_height=200    the box is at least this many points tall (blank space at the bottom)
                           buttons=["check-form", "print-form"]   a row of buttons at its bottom right: any of
                                             "check-form", "reset-form", "generate-qr", "print-form" (screen only)
     A QUESTION          text / long / date / radio / checks / check / select (id, label, ...) plus any of:

@@ -146,7 +146,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | How wide a section is, or start it on a new page | `width="full"` / `width="half"` / `new_page=True` on its `section(...)` in the form file |
 | How wide one question is (e.g. a whole row) | add `cols=12` (or `cols=6` for half) to its line in the form file |
 | How tall a paragraph box is | add `height=80` (points, default 50) to its `long(...)` line |
-| How tall a section is at least (blank space at the bottom of its box) | `min_height=200` (points) on its `section(...)`; leave it out to fit the questions |
+| How tall a section is at least (blank space at the bottom of its box) | `min_height=200` (points) on its `section(...)`; leave it out to fit the questions. An auto-width section 300 points tall or more goes full width instead of pairing |
 | Buttons inside a section (Check form, Reset form, Generate QR Code, Print Form) | `buttons=["check-form", "print-form"]` on its `section(...)`; what they do is `BUTTON_JS` in `acrobat_js.py` |
 | Add or remove a question | `forms/lc_form.py` (nothing else: the checks follow the form) |
 | Make a new form | copy `forms/example_form.py` to `forms/<name>_form.py` (see [GUIDE.md](GUIDE.md)) |
@@ -1005,7 +1005,7 @@ layout: box widths are worked out from the label and `max`.
 45. **A section can be made taller (`min_height`).** `section(..., min_height=200)` draws the section's box at least 200 points
     tall; the extra is blank space at the bottom, below the last question, note, buttons or sign-off lines. It is a minimum: if the
     questions need more room they win. It counts everywhere a section's height counts: a section that no longer fits moves to
-    the next page (and is kept whole, like a sign-off section), a half-width pair is as tall as the taller one, and the room left
+    the next page (and is kept whole, like a sign-off section), an auto-width section that reaches 300 points no longer pairs side by side (it goes full width), a half-width pair is as tall as the taller one, and the room left
     on the last page is what is really left. `check_form` refuses a value that is not a number, is 0 or less, or is taller than a
     page. Without it nothing changes: all 16 PDFs `build.py` and `build_all.py` make are byte-identical to before (`PYTHONHASHSEED=0`).
     `check_min_height.py` checks it. PDF Template Studio's canvas sets it by dragging a selected section's bottom edge.
