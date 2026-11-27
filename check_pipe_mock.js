@@ -2,6 +2,8 @@
 // fake of Acrobat's document: fields that hold a value, and nothing else. Used by check_pipe.py; not needed to build.
 // Input (stdin, JSON): {mode, script, button, types: {field name: type}, cases: [{field name: value}, ...]}
 //   mode "records":  returns, for each case, lcPipeRecords(doc)   (the 4 pipe records)
+//   mode "rules":    each case {values, watch}: runs lcRules(doc) (greys, locks, clears, marks mandatory), then returns
+//                    {fields: {name: {readonly, required, value}} for the names in watch, records: lcPipeRecords(doc)}
 //   mode "print":    each case {values, gen, stored, after}: optionally presses Generate QR Code (gen), sets the hidden "__qr" to
 //                    stored (how the viewer kept the text), changes the answers in after, then presses Print Form; says if it printed
 //   mode "generate": runs the button script (Generate QR Code) and returns, for each case, the alerts it showed,
@@ -62,11 +64,16 @@ vm.runInContext(input.script, ctx, { filename: "document-script.js" });
 
 const out = [];
 for (const values of input.cases) {
-  const spec = input.mode === "print" ? values : null;   // print: {values, gen, stored, after}
+  const spec = input.mode === "print" || input.mode === "rules" ? values : null;   // print: {values, gen, stored, after}; rules: {values, watch}
   const doc = makeDoc(input.types, spec ? spec.values : values, alerts);
   ctx.__d = doc;
   if (input.mode === "records") {
     out.push(vm.runInContext("lcPipeRecords(__d)", ctx));
+  } else if (input.mode === "rules") {
+    vm.runInContext("lcRules(__d)", ctx);
+    const fields = {};
+    for (const n of spec.watch) { const f = doc.getField(n); fields[n] = { readonly: f.readonly, required: f.required, value: String(f.value) }; }
+    out.push({ fields, records: vm.runInContext("lcPipeRecords(__d)", ctx) });
   } else if (input.mode === "print") {
     alerts.length = 0;
     if (spec.gen) vm.runInContext(`(function () {\n${input.button}\n}).call(__d);`, ctx, { filename: "generate-button.js" });

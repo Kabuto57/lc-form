@@ -244,7 +244,7 @@ The LC form's own checks:
 |---|---|
 | Date of expiry must not be before the latest shipment date | 11.1 |
 | Date of expiry must not be before the application date | 11.1 |
-| Latest shipment date must not be before the application date | 10.9 |
+| Latest shipment date must not be before the application date | 10.13 |
 | Application date must not be in the future | 1.1 |
 | Amount must be more than zero | 8.2 |
 | "For FOB/CFR/FCA/CPT" insurance (14.15) must not be filled in when price basis is CIF or CIP (the beneficiary insures) | 14.15 |
@@ -261,7 +261,7 @@ The LC form's own checks:
 #### Every question
 
 "Mandatory" says **always**, **when** a condition holds, or **no**. A question with a "when" condition is also locked
-until that condition holds, except for 10.4 and 10.7, which are never locked. "Unlocked when" means the question only
+until that condition holds. "Unlocked when" means the question only
 applies then, but stays optional.
 
 **1. Application**
@@ -352,12 +352,16 @@ applies then, but stays optional.
 | 10.1 | `partial_shipment` | Partial shipment | pick one: allowed / not allowed | **always** |  |  |
 | 10.2 | `transhipment` | Transhipment | pick one: allowed / not allowed | **always** |  |  |
 | 10.3 | `shipment_from` | Shipment from | drop-down: Port of Loading / Airport of Departure / Dispatch from / Place of Taking in charge / Place of Receipt | no |  |  |
-| 10.4 | `shipment_from_place` | Shipment from: place | text | when 10.3 is picked | 35 |  |
-| 10.5 | `shipment_from_place_2` | Shipment from: place (line 2) | text | no |  |  |
-| 10.6 | `shipment_to` | Shipment to | drop-down: Port of Discharge / Airport of Destination / For Transportation to / Place of Final Destination / Place of Delivery | no |  |  |
-| 10.7 | `shipment_to_place` | Shipment to: place | text | when 10.6 is picked | 35 |  |
-| 10.8 | `shipment_to_place_2` | Shipment to: place (line 2) | text | no |  |  |
-| 10.9 | `latest_shipment_date` | Latest shipment date | date | no |  |  |
+| 10.4 | `shipment_from_port` | Port of Loading / Airport of Departure | text | when 10.3 is Port of Loading, Place of Taking in charge or Place of Receipt | 35 |  |
+| 10.5 | `shipment_from_port_2` | Port of Loading / Airport of Departure (line 2) | text | no (unlocked when 10.4 is) | 35 |  |
+| 10.6 | `shipment_from_place` | Dispatch from / Place of Taking in Charge / Place of Receipt | text | when 10.3 is Dispatch from, Place of Taking in charge or Place of Receipt | 35 |  |
+| 10.7 | `shipment_from_place_2` | Dispatch from / Place of Taking in Charge / Place of Receipt (line 2) | text | no (unlocked when 10.6 is) | 35 |  |
+| 10.8 | `shipment_to` | Shipment to | drop-down: Port of Discharge / Airport of Destination / For Transportation to / Place of Final Destination / Place of Delivery | no |  |  |
+| 10.9 | `shipment_to_port` | Port of Discharge / Airport of Destination | text | when 10.8 is Port of Discharge, Place of Final Destination or Place of Delivery | 35 |  |
+| 10.10 | `shipment_to_port_2` | Port of Discharge / Airport of Destination (line 2) | text | no (unlocked when 10.9 is) | 35 |  |
+| 10.11 | `shipment_to_place` | For Transportation to / Place of Final Destination / Place of Delivery | text | when 10.8 is For Transportation to, Place of Final Destination or Place of Delivery | 35 |  |
+| 10.12 | `shipment_to_place_2` | For Transportation to / Place of Final Destination / Place of Delivery (line 2) | text | no (unlocked when 10.11 is) | 35 |  |
+| 10.13 | `latest_shipment_date` | Latest shipment date | date | no |  |  |
 
 **11. Expiry and Presentation**
 
@@ -659,8 +663,8 @@ lines). Positions with no question use the old layout's "if empty" value: 1_02 (
 
 **The old form's quirks, reproduced on purpose** (the Bank's back end expects them; change them in the table, not in the engine):
 the goods description is cut at 400 characters and the additional conditions at 600 (`"max"`); text lines are padded to 65, and a
-line can run to 66 characters before its `{}`; three advising modes share `S`, Local Delivery and Others share `O`; the first filled
-place of Dispatch from / Taking in charge / Receipt goes into 1_17 (and of the three destinations into 1_22), which kind it was is
+line can run to 66 characters before its `{}`; three advising modes share `S`, Local Delivery and Others share `O`; the port box (Port of Loading, and with Taking in charge or Receipt too)
+goes into 1_16 and the place box into 1_17 (likewise 1_21 / 1_22 for the destination), which kind the place was is
 lost except for `44A` / `44B`; Date and Term drafts are both `N`; the drop-down words go into the clauses as typed
 (`COUNTERSIGNED BY One`, `need not BE VERIFIED`); the insurance clause is one fixed sentence whatever the arrangement; a
 quantity of `00` is not `0` (so `00 ORIGINALS`); a certificate of origin with 0 originals and 0 copies and a country is
@@ -1009,3 +1013,12 @@ layout: box widths are worked out from the label and `max`.
     on the last page is what is really left. `check_form` refuses a value that is not a number, is 0 or less, or is taller than a
     page. Without it nothing changes: all 16 PDFs `build.py` and `build_all.py` make are byte-identical to before (`PYTHONHASHSEED=0`).
     `check_min_height.py` checks it. PDF Template Studio's canvas sets it by dragging a selected section's bottom edge.
+46. **Shipment from / to: separate Port and Place boxes, as in the old smart form.** Each side now has a Port box pair and a Place box
+    pair (2 lines of 35), greyed, locked and cleared until the drop-down choice needs them, then mandatory (line 1). From: Port of
+    Loading shows only the port box, Dispatch from only the place box, Place of Taking in charge and Place of Receipt both. To: Port of
+    Discharge shows only the port box, For Transportation to only the place box, Place of Final Destination and Place of Delivery both.
+    **Ids changed (tell the Bank's system team):** new `shipment_from_port`, `shipment_from_port_2`, `shipment_to_port`,
+    `shipment_to_port_2`; `shipment_from_place(_2)` and `shipment_to_place(_2)` stay but now mean only the Dispatch / Taking in charge /
+    Receipt place (and For Transportation to / Final Destination / Delivery place), no longer the port. In the pipe form 1_16 / 1_21
+    read the port boxes and 1_17 / 1_22 the place boxes (no "if" any more: the boxes are cleared when they do not apply).
+    `check_pipe.py` compares all 4 + 4 choices with the old barcode code and checks the greying, locking and mandatory state.

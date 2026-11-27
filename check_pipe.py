@@ -20,8 +20,10 @@ Needs node, and the smart-form extract (the old form's scripts and the golden sa
 (a missing extract is a failure, never a skip).
 """
 import argparse
+import contextlib
 import copy
 import datetime
+import io
 import json
 import os
 import random
@@ -122,6 +124,7 @@ OLD_PLACES = {   # shipment type -> (old subform, text box prefix)
     "Place of Final Destination": ("subfrmShipmentTo.subfrmDischargeDestination.subfrmPlaceOfFinalDestination", "txtPlaceOfFinalDestination"),
     "Place of Delivery": ("subfrmShipmentTo.subfrmDischargeDestination.subfrmPlaceOfDelivery", "txtPlaceOfDelivery"),
 }
+TWO_BOXES = ("Place of Taking in charge", "Place of Receipt", "Place of Final Destination", "Place of Delivery")   # choices that show Port + Place
 OLD_PRICE = {"FOB": "FOB", "CFR": "CFR", "CIF": "CIF", "Local Delivery": "LocalDelivery", "FCA": "FCA", "CIP": "CIP", "CPT": "CPT", "Others": "Others"}
 OLD_MODE = {"Full Swift": "FullTelexSwift", "Registered Airmail": "RegisteredAirmail", "Airmail with Brief Swift": "AirmailWithBriefTelexSwift",
             "Courier Service": "CourierService", "Courier Service with Brief Swift": "CourierServiceWithBriefTelexSwift"}
@@ -183,12 +186,16 @@ def to_old(a, locked):
     if g("price_basis"):
         v[f"{L}subfrmPriceBasis.RadioButtonList.{OLD_PRICE[g('price_basis')]}"] = g("price_basis")
     put(L + "subfrmPriceBasis.txtOthers", g("price_basis_other"))
-    for key, drop in (("shipment_from", "subfrmShipmentFrom.drpPortOfLoading"), ("shipment_to", "subfrmShipmentTo.drpPortOfDischarge")):
+    for key, drop, port in (("shipment_from", "subfrmShipmentFrom.drpPortOfLoading", "Port of Loading / Airport of Departure"),
+                            ("shipment_to", "subfrmShipmentTo.drpPortOfDischarge", "Port of Discharge / Airport of Destination")):
         if g(key):
             v[L + drop] = g(key)
-            box, name = OLD_PLACES[g(key)]
-            put(f"{L}{box}.{name}1", g(key + "_place"))
-            put(f"{L}{box}.{name}2", g(key + "_place_2"))
+            # the two-box choices show the port box as well as their own (the old form's drpPortOfLoading change event)
+            for choice in dict.fromkeys([port, g(key)] if g(key) in TWO_BOXES else [g(key)]):
+                box, name = OLD_PLACES[choice]
+                suffix = "_port" if choice == port else "_place"
+                put(f"{L}{box}.{name}1", g(key + suffix))
+                put(f"{L}{box}.{name}2", g(key + suffix + "_2"))
     put(L + "subfrmShipmentDate.txtDate", iso(g("latest_shipment_date")))
     put(L + "subfrmDateOfExpiry.txtDate", iso(g("expiry_date")))
     put(L + "subfrmPresentation.txtPeriod", g("presentation_days"))
@@ -378,8 +385,8 @@ GOLDEN = {
     "applicant_address_3": "SINGAPORE 079903", "beneficiary_name": "GLOBAL EXPORTS LLC", "beneficiary_address_1": "88 HARBOUR STREET",
     "beneficiary_address_2": "SHENZHEN 518000", "beneficiary_address_3": "CHINA", "partial_shipment": "allowed", "transhipment": "not allowed",
     "currency": "USD", "amount": "1,250,000.00", "tolerance": True, "tolerance_plus": "5", "tolerance_minus": "5", "price_basis": "FOB",
-    "shipment_from": "Port of Loading / Airport of Departure", "shipment_from_place": "ANY CHINESE PORT",
-    "shipment_to": "Port of Discharge / Airport of Destination", "shipment_to_place": "SINGAPORE",
+    "shipment_from": "Port of Loading / Airport of Departure", "shipment_from_port": "ANY CHINESE PORT",
+    "shipment_to": "Port of Discharge / Airport of Destination", "shipment_to_port": "SINGAPORE",
     "latest_shipment_date": "28/02/2027", "expiry_date": "31/03/2027", "presentation_days": "21", "drafts": True, "drafts_at": "Term",
     "term_days": "90", "term_after": "BILL OF LADING DATE", "mode_of_advising": "Full Swift", "doc_bill_of_lading": True,
     "bl_made_out_to": "order of the Bank", "bl_notify_party": "APPLICANT", "bl_freight": "Collect", "confirmation": True,
@@ -450,7 +457,8 @@ def main():
     cases = [random_answers(rng, spec.FORM) for _ in range(args.cases)]
     cases += [random_answers(rng, spec.FORM, maxi=True) for _ in range(3)]   # every optional box answered, texts at full length
     covered = coverage(spec.FORM, cases)
-    mine = run_node("records", parts, [field_values(spec.FORM, a) for a, _ in cases])
+    # (a stale answer in a locked shipment box is cleared by the form's rules before the records are made: shipment_check proves it)
+    mine = run_node("records", parts, [field_values(spec.FORM, {k: v for k, v in a.items() if not (k in locked and k.startswith(("shipment_from_", "shipment_to_")))}) for a, locked in cases])
     bad = 0
     for n, ((a, locked), ours) in enumerate(zip(cases, mine)):
         theirs = old_records(a, locked)
@@ -471,6 +479,7 @@ def main():
         fail("the guard does not bite: a changed code (L5Y -> L5X) was not noticed")
     print("guard bites: with 1_06 allowed = L5X the records no longer match the old code's")
 
+    shipment_check(spec, parts)
     build_guard_check(spec)
     hostile_check(spec, parts, cases[0][0])
     print_check(spec, parts, {k: v for k, v in cases[0][0].items() if k not in cases[0][1]})   # (Generate QR Code clears locked boxes first)
@@ -495,6 +504,61 @@ def main():
     print("PASS")
 
 
+SHIPMENT = {   # choice -> the boxes it shows (port, place), per side
+    "shipment_from": {"Port of Loading / Airport of Departure": (1, 0), "Dispatch from": (0, 1), "Place of Taking in charge": (1, 1), "Place of Receipt": (1, 1)},
+    "shipment_to": {"Port of Discharge / Airport of Destination": (1, 0), "For Transportation to": (0, 1), "Place of Final Destination": (1, 1), "Place of Delivery": (1, 1)},
+}
+
+
+def shipment_problems(form, parts):
+    """What differs from the old form's behaviour, for each of the 4 + 4 choices with stale answers left in every shipment box:
+    the form's rules (lcRules, run under Node) must unlock and require exactly the boxes the choice shows, grey, lock and clear
+    the others, and the records must equal the old barcode code's for the same answers."""
+    names = [f"{side}_{kind}{n}" for side in SHIPMENT for kind in ("port", "place") for n in ("", "_2")]
+    cases, labels = [], []
+    for side, choices in SHIPMENT.items():
+        other = "shipment_to" if side == "shipment_from" else "shipment_from"
+        for choice, shows in choices.items():
+            a = {k: v for k, v in GOLDEN.items() if not k.startswith(("shipment_from_", "shipment_to_"))}
+            a[side], a[other] = choice, list(SHIPMENT[other])[0]
+            for kind in ("port", "place"):   # stale answers everywhere: the rules must clear what does not apply
+                a[f"{side}_{kind}"], a[f"{side}_{kind}_2"] = f"{kind.upper()} {choice[:6]}", f"{kind.upper()} TWO"
+            a[f"{other}_port"] = "OTHER SIDE PORT"
+            blank = {k: v for k, v in a.items() if not k.startswith(("shipment_from_", "shipment_to_"))}
+            cases += [{"values": field_values(form, a), "watch": names}, {"values": field_values(form, blank), "watch": names}]
+            labels += [(side, choice, shows, a, False), (side, choice, shows, blank, True)]
+    bad = []
+    for (side, choice, shows, a, empty), res in zip(labels, run_node("rules", parts, cases)):
+        for kind, show in zip(("port", "place"), shows):
+            one, two = res["fields"][f"{side}_{kind}"], res["fields"][f"{side}_{kind}_2"]
+            if one["readonly"] == bool(show) or two["readonly"] == bool(show):
+                bad.append(f"{choice}: {kind} box is {'locked' if show else 'unlocked'} (want {'unlocked' if show else 'locked'})")
+            if empty and (one["required"] != bool(show) or two["required"]):   # (mandatory shows only while the box is blank)
+                bad.append(f"{choice}: {kind} box required = {one['required']} / {two['required']} (want {bool(show)} / False)")
+            if not empty and not show and (one["value"] or two["value"]):
+                bad.append(f"{choice}: {kind} box was not cleared")
+        want = old_records(a, set()) if not empty else res["records"]
+        if res["records"] != want:
+            bad.append(f"{choice}: records differ from the old code's ({compare(choice, res['records'], want)} of 4)")
+    return bad
+
+
+def shipment_check(spec, parts):
+    bad = shipment_problems(spec.FORM, parts)
+    if bad:
+        fail("Shipment from / to do not behave like the old form's:\n  " + "\n  ".join(bad[:12]))
+    plain = copy.deepcopy(spec.FORM)   # the same boxes without their rules: the check must notice
+    for q in (q for s in plain["sections"] for q in s["fields"]):
+        if q["id"].startswith(("shipment_from_p", "shipment_to_p")):
+            q.pop("requiredIf", None)
+            q.pop("activeIf", None)
+    with contextlib.redirect_stdout(io.StringIO()):   # (compare prints each difference)
+        found = shipment_problems(plain, pdf_parts(build_pdf(plain)))
+    if not found:
+        fail("the shipment check does not bite: boxes without rules still passed")
+    print("shipment from / to: 4 + 4 choices unlock, require, grey and clear the right boxes, and their records = the old code's (boxes without rules fail)")
+
+
 DELIMITERS = ["AC|ME", "A[B", "A]B", "A{B", "A}B", "A{}B", "A\nB", "A\rB", "A\r\nB", "|", "[]", "A|B|C|D", "\n|[{\r}]"]
 
 
@@ -505,11 +569,11 @@ def hostile_check(spec, parts, base):
     counts = [len(r) for r in form["pipe"]]
     on = {"doc_bill_of_lading": True, "bl_made_out_to": "other (specify)", "bl_freight": "Collect", "doc_air_waybill": True, "awb_freight": "Prepaid",
           "doc_other": True, "doc_certificate_of_origin": True, "origin_originals": "1", "origin_copies": "1", "price_basis": "Others",
-          "shipment_from": "Dispatch from", "shipment_to": "Place of Delivery", "drafts_at": "Term", "doc_delivery_order": True,
+          "shipment_from": "Place of Taking in charge", "shipment_to": "Place of Delivery", "drafts_at": "Term", "doc_delivery_order": True,
           "do_originals": "1", "do_copies": "1", "do_countersigned_by": "One", "do_signature_verified": "need"}
     targets = ["applicant_name", "beneficiary_name", "third_party_name", "advising_bank_name", "applicant_address_1", "beneficiary_address_2",
-               "beneficiary_address_3", "third_party_address_1", "advising_bank_address_2", "shipment_from_place", "shipment_from_place_2",
-               "shipment_to_place", "shipment_to_place_2", "price_basis_other", "term_after", "bl_made_out_to_other", "bl_notify_party",
+               "beneficiary_address_3", "third_party_address_1", "advising_bank_address_2", "shipment_from_port", "shipment_from_port_2", "shipment_from_place",
+               "shipment_from_place_2", "shipment_to_port", "shipment_to_port_2", "shipment_to_place", "shipment_to_place_2", "price_basis_other", "term_after", "bl_made_out_to_other", "bl_notify_party",
                "awb_notify_party", "origin_country", "other_documents_1", "other_documents_2", "goods_description", "additional_conditions",
                "currency", "term_days", "tolerance_plus", "presentation_days"]
     cases, labels = [], []

@@ -40,17 +40,15 @@ layout's "if empty" value: 1_02 (CIF number) is 0000000; the eight reserved / un
 
 THE OLD FORM'S QUIRKS ARE KEPT ON PURPOSE (a back end built for it expects them): the goods description is cut at 400
 characters and the additional conditions at 600 ("max" below: raise them if the Bank's back end allows); three advising
-modes share the code S, Local Delivery and Others share O; 1_18, 1_19, 1_23, 1_24 are always empty and the first filled
-place goes into 1_17 / 1_22; long text is padded to 65 characters (the old documents say 64). See GUIDE.md and README.md.
+modes share the code S, Local Delivery and Others share O; 1_18, 1_19, 1_23, 1_24 are always empty, the port box goes into
+1_16 / 1_21 and the place box into 1_17 / 1_22 (the two-box choices fill both); long text is padded to 65 characters (the old documents say 64). See GUIDE.md and README.md.
 """
 import copy
 
 from lc_form import COUNTRIES, CURRENCIES, DEFAULTS, FORM as LC_FORM  # noqa: F401  (COUNTRIES, CURRENCIES: the LC form's lists)
 
 FROM_PORT = ["Port of Loading / Airport of Departure"]
-FROM_PLACE = ["Dispatch from", "Place of Taking in charge", "Place of Receipt"]
 TO_PORT = ["Port of Discharge / Airport of Destination"]
-TO_PLACE = ["For Transportation to", "Place of Final Destination", "Place of Delivery"]
 TICKED = ["true"]
 
 
@@ -80,13 +78,13 @@ PIPE = [
         {"p": "1_13", "id": "price_basis", "codes": {"FOB": "C", "CFR": "B", "CIF": "A", "Local Delivery": "O", "FCA": "D", "CIP": "G", "CPT": "F", "Others": "O"}},
         {"p": "1_14", "id": "price_basis_other", "if": ["price_basis", ["Others"]]},
         {"p": "1_15", "id": "shipment_from", "codes": {FROM_PORT[0]: "44E", "Dispatch from": "44A", "Place of Taking in charge": "44A", "Place of Receipt": "44A"}},
-        {"p": "1_16", "join": ["shipment_from_place", "shipment_from_place_2"], "if": ["shipment_from", FROM_PORT]},
-        {"p": "1_17", "join": ["shipment_from_place", "shipment_from_place_2"], "if": ["shipment_from", FROM_PLACE]},
+        {"p": "1_16", "join": ["shipment_from_port", "shipment_from_port_2"]},
+        {"p": "1_17", "join": ["shipment_from_place", "shipment_from_place_2"]},
         {"p": "1_18", "c": ""},
         {"p": "1_19", "c": ""},
         {"p": "1_20", "id": "shipment_to", "codes": {TO_PORT[0]: "44F", "For Transportation to": "44B", "Place of Final Destination": "44B", "Place of Delivery": "44B"}},
-        {"p": "1_21", "join": ["shipment_to_place", "shipment_to_place_2"], "if": ["shipment_to", TO_PORT]},
-        {"p": "1_22", "join": ["shipment_to_place", "shipment_to_place_2"], "if": ["shipment_to", TO_PLACE]},
+        {"p": "1_21", "join": ["shipment_to_port", "shipment_to_port_2"]},
+        {"p": "1_22", "join": ["shipment_to_place", "shipment_to_place_2"]},
         {"p": "1_23", "c": ""},
         {"p": "1_24", "c": ""},
         {"p": "1_25", "id": "latest_shipment_date", "as": "date"},
