@@ -69,7 +69,7 @@ function lcRules(d, src) {
 
   // ---- Which questions to check? ----------------------------------------------------------------------------------
   if (src) {
-    // The box's name, without the "Field." style prefix Acrobat can put in front of it.
+    // The box's name, without the form's code ("BGA.") that the joined PDF puts in front of every box name.
     var changedName = String(src).replace(/^[A-Z]+\./, "");
     // A tick-any option or a date's drop-down list is named "<question>__<number>" or "<question>__list".
     var partOfGroup = /^(.+)__(\d+|list)$/.exec(changedName);
@@ -485,7 +485,7 @@ function lcRules(d, src) {
 
         // Step 5: colour each box. Doesn't apply: grey, locked, answer cleared. Problem: red outline, pink fill.
         //         Fine: black outline (or just its underline), white fill.
-        // lookKey sums up the look in two or three letters: "r" if marked Required, then "p" (problem), "o" (fine) or
+        // lookKey sums up the look in two letters: "r" if marked Required, then "p" (problem), "o" (fine) or
         // "g" (greyed). A box that already has this look is skipped: every write to Acrobat is slow.
         lookKey = (required && problem ? "r" : "-") + (applies ? (problem ? "p" : "o") : "g");
         for (i = 0; i < boxNames.length; i++) {
