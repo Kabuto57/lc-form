@@ -70,19 +70,27 @@ global.app = {viewerType: "Reader", viewerVersion: "0", alert(m) { alerts.push(m
 for (const code of Object.keys(D.scripts)) global["lcRules_" + code] = function () { const a = []; a.bad = []; a.first = ""; return a; };
 global.theDoc = doc;
 const first = (code) => Math.min(...fields.filter(f => f.name.startsWith(code + ".") && f.pg !== tmpl).map(f => f.page));
+const ran = [];
+for (const code of Object.keys(D.scripts)) { const stub = global["lcRules_" + code]; global["lcRules_" + code] = function () { ran.push(code); return stub(); }; }
 const out = [];
 for (const st of JSON.parse(fs.readFileSync(process.argv[3], "utf8"))) {
   alerts.length = 0; printed.length = 0; global.lcWarnedAt = 0;
   for (const k of Object.keys(st.set || {})) doc.getField(k).value = st.set[k];
   let err = "";
   try {
-    if (st.go) vm.runInThisContext(D.menu + '\nopenForm(theDoc, "' + st.go + '");');
+    if (st.calc) {   // every form's calculation runs, as in Acrobat when a value changes: which forms' rules ran?
+      const at = st.page, where = at === 0 ? 0 : at.startsWith("first:") ? first(at.slice(6)) : at.startsWith("extra:") ? doc.getField(at.slice(6) + ".__qr").page + 1 : doc.getField(at.slice(3) + ".__qr").page;
+      doc.pageNum = where; ran.length = 0;
+      global.event = {source: st.source ? {name: st.source} : null};
+      for (const code of Object.keys(D.scripts)) new Function(D.calcs[code]).call(doc);
+      global.event = {name: "WillSave"};
+    } else if (st.go) vm.runInThisContext(D.menu + '\nopenForm(theDoc, "' + st.go + '");');
     else if (st.press) new Function(D.buttons[st.code][st.press]).call(doc);
   } catch (e) { err = String(e); }
   const info = {};
   for (const c of Object.keys(D.scripts)) info[c] = {first: first(c), qr: doc.getField(c + ".__qr").page, value: String(doc.getField(c + ".__qr").value).length};
   out.push({label: st.label, err, alerts: alerts.slice(), printed: printed.slice(), numPages: pages.length, pageNum: doc.pageNum, forms: info,
-            answer: st.look ? doc.getField(st.look).value : null});
+            answer: st.look ? doc.getField(st.look).value : null, ran: ran.slice()});
 }
 fs.writeFileSync(process.argv[4], JSON.stringify(out));
 """
@@ -140,15 +148,27 @@ def main():
         {"label": "LC: print", "code": A, "press": "print-form"},
         {"label": "BG: print again", "code": B, "press": "print-form"},
         {"label": "SBLC: print again", "code": C, "press": "print-form"},
+        {"label": "calc: BG box, on BG", "calc": 1, "source": B + ".other_x", "page": "first:" + B},
+        {"label": "calc: LC box, on BG", "calc": 1, "source": A + ".other_x", "page": "first:" + B},
+        {"label": "calc: no source, on BG", "calc": 1, "source": None, "page": "first:" + B},
+        {"label": "calc: no source, BG QR page", "calc": 1, "source": None, "page": "qr:" + B},
+        {"label": "calc: no source, BG extra page", "calc": 1, "source": None, "page": "extra:" + B},
+        {"label": "calc: no source, SBLC first page", "calc": 1, "source": None, "page": "first:" + C},
+        {"label": "calc: no source, menu page", "calc": 1, "source": None, "page": 0},
         {"label": "reset BG", "code": B, "press": "reset-form", "look": longest[B]},
         {"label": "LC answer still there", "look": longest[A]},
     ]
+    calcs = {}
+    for f in pdf.Root.AcroForm.Fields:   # each form's hidden __checks calculation script
+        if str(f.T) in codes:
+            box = next(x for x in f.Kids if str(x.T) == "__checks")
+            calcs[str(f.T)] = str((box if "/AA" in box else box.Kids[0]).AA.C.JS)
     with tempfile.TemporaryDirectory() as tmp:
         d, s, o = (os.path.join(tmp, n) for n in ("d.json", "s.json", "o.json"))
         h = os.path.join(tmp, "h.js")
         open(h, "w").write(HARNESS)
         json.dump({"fields": fields, "numPages": base["numPages"], "menu": menu, "scripts": {c: info[c]["script"] for c in codes},
-                   "buttons": {c: info[c]["buttons"] for c in codes}}, open(d, "w"))
+                   "buttons": {c: info[c]["buttons"] for c in codes}, "calcs": calcs}, open(d, "w"))
         json.dump(steps, open(s, "w"))
         r = subprocess.run(["node", h, d, s, o], capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
@@ -185,6 +205,9 @@ def main():
     want(rp["printed"] == [[True, rp["forms"][A]["first"], rp["forms"][A]["qr"] + 1, False, True]] and not rp["alerts"], f"LC print {rp['printed']} {rp['alerts']}")
     printed_ok("BG: print again", B, 1)
     printed_ok("SBLC: print again", C, 0)
+    for label, ran in (("calc: BG box, on BG", [B]), ("calc: LC box, on BG", [A]), ("calc: no source, on BG", [B]), ("calc: no source, BG QR page", [B]),
+                       ("calc: no source, BG extra page", [B]), ("calc: no source, SBLC first page", [C]), ("calc: no source, menu page", [])):
+        want(res[label]["ran"] == ran and not res[label]["err"], f"{label}: rules ran for {res[label]['ran']} {res[label]['err']}, wanted {ran}")
     rr = res["reset BG"]
     want(rr["answer"] == "" and rr["numPages"] == 40, f"reset BG: answer {rr['answer'][:10]!r}, pages {rr['numPages']} (LC's extra stays)")
     want(len(res["LC answer still there"]["answer"]) == 6000, "reset BG cleared LC's answer")

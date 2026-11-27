@@ -9,14 +9,15 @@ Builds each form file (the same way as build.py), then joins them into one PDF:
     "Main menu" button on every page (except the extra QR code pages, which have no buttons).
   - bookmarks for every form.
 The menu is the ordinary page 0; every form's pages follow it as ordinary pages, always in the PDF, in the order of MENU. Nothing
-is hidden, added or deleted when you switch forms (the free Acrobat Reader has refused hiding and deleting pages), so switching should not fail there.
+is hidden, added or deleted when you switch forms (reported for the free Acrobat Reader: 24 Nov hiding a template, 27 Nov deletePages "One or more pages are in use"), so switching
+should not fail there.
 Clicking a form on the menu (or its bookmark) runs openForm (document script "00 menu"): if the tick box (field "ACCEPT",
 on the menu page) is off it asks to tick it, else it goes to that form's first page. A form's first page moves when the
 forms before it get extra QR code pages, so it is worked out at the click (the form's QR code page minus the pages in front
 of it). The "Main menu" button and bookmark are a plain jump to page 0 and keep every answer; Reset form clears one form.
 Only a long answer needs pages added or deleted: Generate QR Code with more than 2 codes copies that form's hidden page
 template ("LC_qrx", one per form) right after the form's QR code page with Template.spawn and removes them with deletePages;
-the free Reader may refuse that (untested), and then Generate QR Code says so. Needs JavaScript on for the buttons and checks.
+the free Reader may refuse that (untested for these pages), and then Generate QR Code says so. Needs JavaScript on for the buttons and checks.
 Each form keeps its own rules and QR code: Check form, Reset form, Generate QR Code and Print Form work on that form
 only (its fields are renamed "LC.applicant_name", "BG.applicant_name" ..., and its scripts are made to match).
 Needs the form files below (in forms/) and the engine files in this folder. No terms and conditions pages: the old form has them
@@ -75,8 +76,13 @@ def scoped(js, code, before_qr):
     # (Template.spawn with bOverlay false inserts the page BEFORE page nPage)
     js = js.replace("nPage: d.numPages", 'nPage: d.getField("%s.__qr").page + pages.length + 1' % code)
     js = js.replace("this.resetForm();", 'this.resetForm(["%s"]);' % code)
-    # the hidden __checks calculation (one per form, 13 in all) does nothing unless the box that changed is on this form
-    js = js.replace("/*calc*/", 'if (!event.source || String(event.source.name).indexOf("%s.") == 0) ' % code)
+    # The hidden __checks calculation (one per form, 13 in all) runs only for this form: when the box that changed is this
+    # form's (an incremental check), or, when no box is named (a full check), only while the page on screen is one of this
+    # form's pages (its first page up to its last QR code page, extra pages included; never the menu page). Otherwise all 13
+    # forms would do a full check at every open, reset and save. The form's own buttons run their full check themselves.
+    here = ('(function (d) { var q = d.getField("%(c)s.__qr").page, p = d.pageNum; return p >= q - %(n)d && '
+            '(p <= q || (p <= q + 7 && p <= q + lcExtra_%(c)s(d).length)); })(this)') % {"c": code, "n": before_qr}   # (7 = most extra pages)
+    js = js.replace("/*calc*/", 'if (event.source ? String(event.source.name).indexOf("%s.") == 0 : %s) ' % (code, here))
     return js
 
 
@@ -173,14 +179,14 @@ def tick_box(out, page, rect):
 # first page. That page number is not fixed: a form's extra QR code pages are put in right after its QR code page, which
 # pushes every later form down. So it is found when you click: the form's QR code page ("CODE.__qr") minus the number of
 # pages in front of it in that form (BEFORE_QR). Nothing here adds, deletes, hides or shows a page (the free Acrobat Reader
-# refuses some of that); only the extra QR code pages of a long answer need Template.spawn / deletePages (acrobat_js.py).
+# refused some of that when reported, 24 and 27 Nov); only the extra QR code pages of a long answer need Template.spawn / deletePages (acrobat_js.py).
 # Main menu is a plain jump to page 0 and needs no script.
 MENU_JS = """var BEFORE_QR = __BEFORE_QR__;
 var TITLES = __TITLES__;
 function openForm(d, code) {
   try {
     if (d.getField("ACCEPT").value == "Off") {
-      app.alert("Please tick the box to agree to the Bank's terms and conditions before opening a form.", 3);
+      app.alert("Please tick the box to agree to the Bank's terms and conditions.", 3);
       return;
     }
     d.pageNum = d.getField(code + ".__qr").page - BEFORE_QR[code];

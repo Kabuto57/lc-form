@@ -36,7 +36,7 @@ from layout import (ACCENT, FORMATS, INK, MARGIN, PAGE_HEIGHT, PAGE_WIDTH, RULE,
 # It only adds field descriptions to the layout; step 3 makes the PDF objects.
 
 # The calls the events use. Both pass the name of the box that changed, so lcRules re-checks only the questions that read it.
-# "/*calc*/" is a marker: build_all.py turns it into "only while this form is the open one" (the joined PDF has 13 of these).
+# "/*calc*/" is a marker: build_all.py turns it into "only for this form: its own box changed, or, with no box named, only while one of its pages is on screen" (the joined PDF has 13 of these).
 RULES_ON_EVENT = "lcRules(this, event.target.name);"                                    # a click or a blur
 RULES_ON_CALC = "/*calc*/lcRules(this, event.source ? event.source.name : null);"       # any value changed (no source = check all)
 
