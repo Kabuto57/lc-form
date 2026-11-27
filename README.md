@@ -546,7 +546,7 @@ Code and Print Form buttons stay right under the first code, where they always w
 Each code is 110 mm square: 177 × 177 squares of 0.6 mm, on every page.
 
 **The extra pages exist only while needed.** In the PDF they are one hidden *page template* named `qrx` (not one of the
-form's pages: 4 pages as before). Generate QR Code copies it after the QR code page with `Template.spawn` (once for
+form's pages: 4 pages as before). Generate QR Code copies it after the QR code page with `Template.spawn` (or, when the viewer has no usable template object, the older `spawnPageFromTemplate`; see item 49) (once for
 every two codes beyond the first two) and deletes the copies it no longer needs, so a form whose answers shrink, or
 that is reset, goes back to its 4 pages. In the one-PDF build each form has its own template (`LC_qrx`); the copies go right after that form's QR code
 page (the later forms move down), and Reset form deletes them. The fields of a copy are created by the spawn (the viewer
@@ -721,7 +721,7 @@ or a script, also test the PDF in Acrobat:
     The extra pages must come right after that form's QR code page, with the next form after them, and Print Form must print
     only that form's pages. Main menu only goes to page 0.
 12. In the free Acrobat Reader, repeat 8 and 10 and note what happened: does Generate QR Code add the pages (`spawn` with
-    `bRename: true`), do they get deleted (`deletePages`), and how long does drawing 6 or more codes take? None of this
+    `bRename: true`, or the fallback `spawnPageFromTemplate`; the message of a refusal names the viewer), do they get deleted (`deletePages`), and how long does drawing 6 or more codes take? None of this
     is tested there.
 
 ### Changing the form, and making a new one
@@ -1051,3 +1051,17 @@ layout: box widths are worked out from the label and `max`.
     `check_joined.py` are not needed to build, so they now live in `~/Documents/lc-form-extras/checks/` (the items above still name them as they
     were when written). Each expects to be run from inside an lc-form checkout (or with `LC_FORM=<checkout folder>`):
     `cd ~/Documents/lc-form && python ~/Documents/lc-form-extras/checks/check_pipe.py`. `check_joined.py` needs `python build_all.py` first.
+49. **Extra QR code pages: a second way to copy the page, for the free Reader.** Reported 27 Nov (Reader 26.0.32211, one-PDF
+    build): Generate QR Code for more than 2 codes stopped with a `d.getTemplate ... TypeError` (the exact text is not known).
+    Likely cause (inferred, not seen): in Reader `getTemplate` is missing or finds nothing, so `.spawn` was called on null.
+    `lcDrawQr` now calls a new helper, `lcSpawnExtra(d, name, nPage)` (`acrobat_js.py`): (1) `getTemplate(name).spawn(...)` when
+    there is a template object; else (2) the older `Doc.spawnPageFromTemplate(name, nPage, true, false)` (cTemplate, nPage,
+    bRename, bOverlay; Adobe JavaScript reference, `doc.html#spawnpagefromtemplate`); else (3) an error that says "this PDF
+    viewer would not add the extra QR code page (Reader 26.0...)", which Generate QR Code shows as before, with no code half
+    drawn. Adobe's reference says the template feature does not work in Reader (both calls), so whether (2) works there is
+    **untested**: please try it and report. The names of a page copied by (2) are not documented; `lcExtra` finds the page's
+    boxes by the ending `__qrx_1_0`, so any prefix works. `build_all.py` `scoped()` now rewrites the one `lcSpawnExtra(...)` call
+    (this form's `CODE_qrx` and the page after its QR code page; standalone PDFs append at the end) and stops if the call
+    is not found. `pdf_writer.py`'s self-check looks for the new call. To try (2) in Acrobat Pro, type
+    `lcNoTemplateSpawn = true` in the console (skips (1)). `proof_multiqr.py` has three new stand-ins (D: `getTemplate` gives
+    null; E: no `getTemplate`; N: neither call) and runs them, also for every form of the joined PDF.

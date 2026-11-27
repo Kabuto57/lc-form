@@ -967,7 +967,7 @@ function lcQrMatrix(text, part) {
 // the ZapfDingbats font (which prints as a black square) for each dark square, and a space for each light square.
 //   Codes 1 and 2 sit on the form's QR code page: rows "__qr1_0" ... "__qr1_176" and "__qr2_0" ... "__qr2_176".
 //   Codes 3 to 16 go two to a page on extra pages, which exist only while they are needed. lcDrawQr copies the hidden
-//   page template "qrx" (its rows are "__qrx_1_0" ... "__qrx_2_176") after the last page, with Template.spawn, and
+//   page template "qrx" (its rows are "__qrx_1_0" ... "__qrx_2_176") after the last page, with lcSpawnExtra, and
 //   deletes the extra pages it no longer needs. If the viewer refuses to delete a page, the page stays, empty and
 //   marked "not used", and is left out of printing (see lcLastPage).
 // The viewer renames a copied page's boxes (bRename: true), but each name still ends with the template's name, so
@@ -1020,6 +1020,42 @@ function lcSlot(d, extraPages, j) {
     if (prefix === undefined) return null;
     return d["getField"](prefix + rowName + "_" + what);
   };
+}
+
+// lcSpawnExtra(d, name, nPage): copies the hidden page template called name into the document, before page nPage
+// (0 = the first page; d.numPages = after the last one). The new page's boxes are renamed, as lcDrawQr needs.
+// Two ways, because the free Acrobat Reader is not known to allow the first (untested; Adobe's reference says the
+// template feature does not work in Reader, but the Reader seen on 27 Nov did copy pages):
+//   1. Template.spawn, from d.getTemplate(name) (Acrobat 5 and later; getTemplate gives null when it finds no template).
+//   2. Doc.spawnPageFromTemplate(cTemplate, nPage, bRename, bOverlay), the older call (deprecated, same effect).
+//      Adobe's JavaScript reference (Doc.spawnPageFromTemplate):
+//      https://opensource.adobe.com/dc-acrobat-sdk-docs/library/jsapiref/doc.html#spawnpagefromtemplate
+// If neither is there, or both fail, this throws an Error that says which viewer would not do it, so Generate QR Code can
+// tell the user. Setting lcNoTemplateSpawn = true in the console skips way 1 (to try way 2 in Acrobat Pro).
+// build_all.py rewrites the call to lcSpawnExtra in lcDrawQr (the form's code in the name, the page to put it on), so
+// keep that call's spelling.
+function lcSpawnExtra(d, name, nPage) {
+  var template = null;
+  var firstError = null;
+  try {
+    if (typeof lcNoTemplateSpawn == "undefined" || !lcNoTemplateSpawn) template = d.getTemplate ? d.getTemplate(name) : null;
+    if (template) {
+      template.spawn({nPage: nPage, bRename: true, bOverlay: false});
+      return;
+    }
+  } catch (e) {
+    firstError = e;   // try the older call before giving up
+  }
+  try {
+    if (typeof d.spawnPageFromTemplate == "function") {
+      d.spawnPageFromTemplate(name, nPage, true, false);
+      return;
+    }
+  } catch (e2) {
+    firstError = e2;
+  }
+  throw new Error("this PDF viewer would not add the extra QR code page (" + app.viewerType + " " + app.viewerVersion + ")" +
+                  (firstError ? ": " + firstError : ""));
 }
 
 // How many extra pages n codes need. Example: 2 codes -> 0 extra pages; 3 or 4 codes -> 1; 5 or 6 -> 2.
@@ -1096,7 +1132,7 @@ function lcDrawQr(d, text) {
     extraNeeded = lcPagesFor(count);
     // Add the extra pages that are needed.
     while (pages.length < extraNeeded) {
-      d.getTemplate("qrx").spawn({nPage: d.numPages, bRename: true, bOverlay: false});
+      lcSpawnExtra(d, "qrx", d.numPages);
       newPages = lcExtra(d);
       if (newPages.length <= pages.length) throw new Error("the viewer did not add the page for QR code " + (2 * pages.length + 3));
       pages = newPages;

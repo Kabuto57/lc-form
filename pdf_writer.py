@@ -595,7 +595,7 @@ def self_check(pdf_bytes, spec):
         assert all(f"__qrx_{k}_{y}" in fields for y in range(177)) and f"__qrx_{k}_label" in fields, "missing the extra QR code rows"
         assert int(fields[f"__qrx_{k}_frame"].Kids[0].F) == 2, "the extra QR frames should start hidden"
         assert all(w.P.objgen == templates[1].objgen for y in (0, 176) for w in fields[f"__qrx_{k}_{y}"].Kids), "extra QR rows must sit on the template"
-    assert "bRename: true" in doc_script and 'getTemplate("qrx")' in doc_script, "the script does not spawn the extra QR page"
+    assert "bRename: true" in doc_script and 'lcSpawnExtra(d, "qrx", d.numPages)' in doc_script, "the script does not spawn the extra QR page"
     if spec.FORM.get("qrFormat") == "pipe":
         assert "function lcPipeRecords(" in doc_script and "__PIPE__" not in doc_script and "__GROUPS__" not in doc_script, "the pipe records script is missing or not filled in"
     assert "/WS" in pdf.Root.AA and "/WP" in pdf.Root.AA, "missing the warning before save / print"

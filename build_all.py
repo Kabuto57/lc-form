@@ -16,7 +16,7 @@ on the menu page) is off it asks to tick it, else it goes to that form's first p
 forms before it get extra QR code pages, so it is worked out at the click (the form's QR code page minus the pages in front
 of it). The "Main menu" button and bookmark are a plain jump to page 0 and keep every answer; Reset form clears one form.
 Only a long answer needs pages added or deleted: Generate QR Code with more than 2 codes copies that form's hidden page
-template ("LC_qrx", one per form) right after the form's QR code page with Template.spawn and removes them with deletePages;
+template ("LC_qrx", one per form) right after the form's QR code page with Template.spawn (or the older spawnPageFromTemplate) and removes them with deletePages;
 the free Reader may refuse that (untested for these pages), and then Generate QR Code says so. Needs JavaScript on for the buttons and checks.
 Each form keeps its own rules and QR code: Check form, Reset form, Generate QR Code and Print Form work on that form
 only (its fields are renamed "LC.applicant_name", "BG.applicant_name" ..., and its scripts are made to match).
@@ -71,10 +71,11 @@ def scoped(js, code, before_qr):
     js = js.replace("n = d.getNthFieldName(i);", 'n = d.getNthFieldName(i); if (n.indexOf("%s.") != 0) continue; n = n.slice(%d);' % (code, len(code) + 1))
     js = re.sub(r"\b(%s)\b" % "|".join(FUNCTIONS), lambda m: m.group(1) + "_" + code, js)
     js = js.replace("this.print(true, 0, ", 'this.print(true, this.getField("%s.__qr").page - %d, ' % (code, before_qr))   # from this form's first page
-    js = js.replace('getTemplate("qrx")', 'getTemplate("%s_qrx")' % code)   # this form's extra QR code page
-    # an extra QR code page goes right after the QR code page and the extra pages already there, not at the end of the PDF
-    # (Template.spawn with bOverlay false inserts the page BEFORE page nPage)
-    js = js.replace("nPage: d.numPages", 'nPage: d.getField("%s.__qr").page + pages.length + 1' % code)
+    # an extra QR code page: this form's template, put right after the QR code page and the extra pages already there, not at
+    # the end of the PDF (bOverlay false inserts the new page BEFORE page nPage). lcSpawnExtra has both ways of copying it.
+    call = 'lcSpawnExtra(d, "qrx", d.numPages)'
+    assert call in js or "lcSpawnExtra" not in js, "scoped(): the extra QR page call changed"
+    js = js.replace(call, 'lcSpawnExtra(d, "%s_qrx", d.getField("%s.__qr").page + pages.length + 1)' % (code, code))
     js = js.replace("this.resetForm();", 'this.resetForm(["%s"]);' % code)
     # The hidden __checks calculation (one per form, 13 in all) runs only for this form: when the box that changed is this
     # form's (an incremental check), or, when no box is named (a full check), only while the page on screen is one of this
