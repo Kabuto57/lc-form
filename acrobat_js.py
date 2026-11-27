@@ -1494,6 +1494,21 @@ function lcPipeRecords(d, answers) {
 function lcPipeText(d) {
   return lcPipeRecords(d).join("\n");
 }
+
+// Is the text kept in the hidden box the current records? The box is single-line, so a viewer may have changed the new lines
+// between records: Acrobat Pro turns each into one space, others keep them, write CR or CRLF, or drop them. The records hold
+// no line break themselves, so only those separators are allowed; any other difference (even one extra space) is a change.
+// Example: for the records "A|" and "B|", the stored text "A| B|" (Acrobat) matches; "A|  B|" or "A| B |" does not.
+function lcPipeStoredMatches(stored, d) {
+  var records = lcPipeRecords(d);
+  var separators = ["\n", "\r\n", "\r", " ", ""];
+  var i;
+  stored = String(stored);
+  for (i = 0; i < separators.length; i++) {
+    if (stored == records.join(separators[i])) return true;
+  }
+  return false;
+}
 """[1:-1]
 
 # THE BUTTON AND EVENT SCRIPTS. Each entry below is stored in the PDF as one action (what happens when a button is
@@ -1706,13 +1721,13 @@ if (typeof lcRules != "function") {
     "print-form-pipe": r"""
 // "PRINT FORM" BUTTON (pipe-format form).
 // What this does: prints only once the QR codes exist and still carry the current records, every code needed is on its
-// page and none is left over. The hidden box may keep, change or drop the new lines between records (the records
-// hold none themselves), so the comparison, and the count of codes, use the current records, not the stored text.
+// page and none is left over. The hidden box may keep, change (Acrobat makes each a space) or drop the new lines between
+// records (the records hold none themselves), so lcPipeStoredMatches accepts exactly those; the count of codes uses the current records.
 var qrBox = this.getField("__qr");
 var recordsNow = typeof lcPipeText == "function" ? lcPipeText(this) : "";   // what the codes should say, with today's answers
 var sameAnswers = false;      // do the codes on the form carry these records?
 var codesProblem = "";        // what is wrong with the codes on the pages ("" = nothing)
-try { sameAnswers = String(qrBox.value).replace(/[\r\n]/g, "") == recordsNow.replace(/[\r\n]/g, ""); } catch (e) {}
+try { sameAnswers = lcPipeStoredMatches(qrBox.value, this); } catch (e) {}
 try { codesProblem = lcQrCheck(this, recordsNow); } catch (e) { codesProblem = String(e); }
 if (!/\S/.test(qrBox.value)) {
   app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);

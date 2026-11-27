@@ -643,9 +643,10 @@ QR page's, which this form does not change.
 autofill or a pasted newline skips it, so `lcPipeAnswers` turns each of those characters, and any line break, into a space before
 the records are built (in the paragraph boxes, goods description, additional conditions and other documents, only `| [ ] { }` become a
 space, and any line break counts as one Enter, written `{}`). Valid answers are unchanged (the oracle still matches byte for byte).
-Print Form compares the stored QR text and the current records with all CR/LF removed, because the hidden box is single-line and
-Acrobat may keep, change or drop the newlines between records. `check_pipe.py` tries every such character in 27 boxes
-and Print Form with each way of storing the newlines.
+Print Form (`lcPipeStoredMatches`) accepts the stored QR text only if it equals the current records joined by `\n`, `\r\n`, `\r`,
+one space or nothing, because the hidden box is single-line and Acrobat Pro turns each newline into one space (others keep, change or
+drop it). Any other difference, even one extra space in an answer, counts as a changed answer. `check_pipe.py` tries every such
+character in 27 boxes and Print Form with each way of storing the newlines.
 
 **What the old format does not carry** (30 of the 108 questions, so they are not in the QR code, as in the old form's barcode; the
 printed PDF has them): application date; contact name / tel / fax; DC no, bank code; back-to-back (3); the "Drafts for the percentage"
@@ -996,3 +997,7 @@ layout: box widths are worked out from the label and `max`.
     (`__MODEL__` and the others), because the build fills those in everywhere in the script, comments included, which had pasted the whole
     rules table into a comment. Proven with a differential test (not committed): the old and the new scripts, run in node against the same
     fake Acrobat document, gave identical results, field writes and QR codes on tens of thousands of random cases.
+44. **Pipe form: Print Form works in real Acrobat.** Acrobat Pro turns each newline stored in the single-line hidden box `__qr`
+    into one space, so Print Form (which removed CR/LF from the stored text only) always said "Your answers have changed".
+    `lcPipeStoredMatches` now accepts the stored text when it equals the current records joined by a newline, CR LF, CR, one space or
+    nothing, and nothing else (one extra space in an answer still refuses). `check_pipe.py` has the Acrobat case and the extra-space case.

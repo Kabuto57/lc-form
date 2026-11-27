@@ -539,19 +539,22 @@ def print_check(spec, parts, base, form=None):
     form = form or spec.FORM
     vals = field_values(form, base)
     text = "\n".join(run_node("records", parts, [vals])[0])
-    ways = {"kept": text, "removed": text.replace("\n", ""), "CR": text.replace("\n", "\r"), "CRLF": text.replace("\n", "\r\n")}
+    ways = {"kept": text, "removed": text.replace("\n", ""), "CR": text.replace("\n", "\r"), "CRLF": text.replace("\n", "\r\n"),
+            "Acrobat's single space": text.replace("\n", " ")}
     cases = [{"values": vals, "gen": True, "stored": s, "after": {}} for s in ways.values()]
     cases.append({"values": vals, "gen": True, "stored": None, "after": {"applicant_name": base["applicant_name"] + "X"}})
     cases.append({"values": vals, "gen": False, "stored": "", "after": {}})
     cases.append({"values": vals, "gen": False, "stored": text, "after": {}})   # a stored text but no code drawn
+    # one extra space inside an answer (after the first "|") must still refuse, even with Acrobat's spaces between records
+    cases.append({"values": vals, "gen": True, "stored": text.replace("\n", " ").replace("|", "| ", 1), "after": {}})
     res = run_node("print", parts, cases)
     for way, r in zip(ways, res):
         if not r["printed"]:
             fail(f"Print Form refused the stored QR text ({way}): {r['alerts']}")
-    if any(r["printed"] for r in res[4:]):
+    if any(r["printed"] for r in res[len(ways):]):
         fail("Print Form printed although the answers changed, no code was drawn or the field is empty: the check does not bite")
-    print("Print Form: prints after Generate QR Code with the stored text's newlines kept, removed, CR or CRLF; refuses a changed answer, "
-          "a missing code and an empty code")
+    print("Print Form: prints after Generate QR Code with the stored text's newlines kept, removed, CR, CRLF or one space (Acrobat's single-line field); refuses a changed answer, "
+          "a missing code, an empty code and one extra space in an answer")
 
 
 def build_guard_check(spec):
