@@ -6,226 +6,608 @@ function only, no let, const or =>. Use plain ASCII characters only (the build c
 The __NAMES__ in capitals are filled in for each form by document_script() in pdf_writer.py.
 """
 
-# The document script, stored in the PDF as "lcRules": the rules engine (red boxes, locking, checks), the QR
+# The document script, stored in the PDF as "lcRules" (the placeholders __MODEL__, __DEPS__, __CHECKS__ and __DATES__ in it are filled in per form
+# by pdf_writer.py): the rules engine (red boxes, locking, checks), the QR
 # codes' text (lcPayload), the QR encoder (lcQrMatrix), and the drawing of up to 16 codes over the QR page and the extra QR
 # pages (lcDrawQr, lcExtra, lcQrCheck).
 DOCUMENT_JS = r"""
+// =====================================================================================================================
 // THE RULES ENGINE (runs inside Acrobat). Built into the PDF as the document script "lcRules".
+//
 // lcRules(doc) checks every question and colours its box:
 //   blank or wrong mandatory answer -> red outline, pink fill, marked Required
 //   answered and right              -> black outline, white fill
 //   doesn't apply yet               -> greyed out, locked, and its answer cleared
 // It returns the list of missing questions, plus .bad (wrong answers) and .first (where to put the cursor).
+//
+// lcWords(amount, currency) writes an amount in words ("USD One Thousand ... only").
 // lcDates(doc) shows each date's calendar box and hides its drop-down list (Acrobat only).
-// __MODEL__ is filled in by document_script (step 2) with the rules table built from the form; __DATES__ with the date
-// question ids. Acrobat's JavaScript is old-style: var, no arrow functions.
-// The rules table, the index "box -> the questions to re-check when it changes" (null = always check everything), and what
-// the last run saw: v = each box's last-seen value, st = each box's last-written look (so unchanged boxes are not written again).
+//
+// The form's own data is pasted into this script when the PDF is built (see document_script in pdf_writer.py):
+//   lcModel  the rules table: one entry per question (its label, kind, "applies only if" rules, "mandatory if" rules ...)
+//   lcDeps   an index: box name -> the questions to re-check when that box changes (null = always check everything)
+//   lcState  what the last run saw, so the next run can skip work that cannot have changed:
+//              v  = each box's last-seen value (a box whose value did not change is not checked again)
+//              st = each box's last-written look (a box whose look did not change is not written again)
+//
+// Acrobat's JavaScript is old-style (ES3/ES5): write "var" and "function" only, and none of the newer (ES6) syntax or
+// methods. Plain ASCII characters only (the build checks this).
+// Every read or write of an Acrobat field is slow, so the code below avoids repeating them.
+// =====================================================================================================================
 var lcModel = __MODEL__;
 var lcDeps = __DEPS__;
 var lcState = {v: {}, st: {}};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcRules(d, src)
+//   d    the PDF document (Acrobat's "this").
+//   src  optional. The name of the box that just changed (its blur, its click, or what the calculation says triggered
+//        it). Then only the questions that read that box are re-checked, and nothing at all if its value is what the
+//        last run saw. No src (opening, Reset form, Check form, saving ...): every question, and every look is
+//        written again.
+// Returns the array of missing questions' labels, with two extra properties:
+//   .bad    the wrong answers, as "<question>: <what is wrong>"
+//   .first  the name of the box of the first problem (Check form puts the cursor there)
+// ---------------------------------------------------------------------------------------------------------------------
 function lcRules(d, src) {
-var M = lcModel, S = lcState, only = null, calc, pass, cleared = false, nm, g, sig;
-// src = the name of the box that just changed (its blur, its click, or what the calculation says triggered it). Then only the
-// questions that read that box are re-checked (lcDeps), and nothing at all if its value is what the last run saw.
-// No src (opening, Reset form, Check form, saving ...): every question, and every look is written again.
-if (src) {
-  nm = String(src).replace(/^[A-Z]+\./, ""); g = /^(.+)__(\d+|list)$/.exec(nm);
-  g = M[nm] ? nm : g && M[g[1]] ? g[1] : "";
-  if (lcDeps) {
-    g = g && lcDeps[g];
-    sig = d.getField(nm); sig = sig ? String(sig.value) : "";
-    if (!g || S.v[nm] === sig) { g = []; g.bad = []; g.first = ""; return g; }
-    S.v[nm] = sig; only = {}; for (sig = 0; sig < g.length; sig++) only[g[sig]] = 1;
-  }
-}
-if (!only) { S.v = {}; S.st = {}; }
-function has(list, x) { for (var i = 0; i < list.length; i++) if (list[i] == x) return true; return false; }
+  // ---- Fixed values used below, given names -------------------------------------------------------------------------
+  var DISPLAY_HIDDEN = 1;                               // a field's .display is 1 when it is hidden (Acrobat's display.hidden)
+  var OFF = "Off";                                      // the value of a tick box or option that is not ticked
+  var GREY_LINE = ["G", 0.6];                           // outline of a box that does not apply (mid grey)
+  var GREY_FILL = ["G", 0.86];                          // fill of a box that does not apply (light grey)
+  var PINK_FILL = ["RGB", 1, 0.88, 0.88];              // fill of a box that is blank or wrong (the outline is red)
+  var MONTH_NAMES = "JanFebMarAprMayJunJulAugSepOctNovDec";   // 3 letters each, so month number = position / 3 + 1
+  // The characters an answer may contain (letters, digits, space and . , - / ( ) ' : ? + # & @ % and line breaks). This
+  // is written as a string, so the backslashes are doubled: it reads [^A-Za-z0-9 .,\-/()':?+#&@%\r\n] ("anything else").
+  var OTHER_CHARACTERS = "[^A-Za-z0-9 .,\\-/()':?+#&@%\\r\\n]";
 
-// The answer to question id, read from the PDF's fields.
-function val(id) {
-  var m = M[id], f, a = [], i;
-  if (m.kind == "checks") { for (i = 0; i < m.options.length; i++) { f = d.getField(id + "__" + i); if (f && f.value != "Off") a.push(m.options[i]); } return a; }
-  if (m.kind == "date" && shown(id)) return d.getField(id).valueAsString;
-  if (m.kind == "date" && d.getField(id + "__list")) { a = /^(\d\d) (\w{3}) (\d{4})$/.exec(d.getField(id + "__list").valueAsString);
-    return a ? a[1] + "/" + ("0" + ("JanFebMarAprMayJunJulAugSepOctNovDec".indexOf(a[2]) / 3 + 1)).slice(-2) + "/" + a[3] : ""; }
-  f = d.getField(id); if (!f) return "";
-  if (m.kind == "check") return f.value != "Off" ? "true" : "false";
-  return f.value == "Off" ? "" : String(f.value);
-}
-function shown(id) { var f = d.getField(id); return !!f && f.display != 1; } // 1 = display.hidden
-function empty(x) { return typeof x == "object" ? !x.length : x === ""; }
+  var model = lcModel;        // the rules table (see the top of this script)
+  var state = lcState;        // what the last run saw
+  var onlyThese = null;       // null = check every question; otherwise {question id: 1} = check just those
+  var cleared = false;        // did this pass clear a box? (then a second pass is needed: another question may read it)
+  var i;
 
-// Does any of these rules hold?
-function any(rules) {
-  var i, j, x, hit;
-  for (i = 0; i < rules.length; i++) {
-    x = val(rules[i][0]); hit = false;
-    if (typeof x == "object") { for (j = 0; j < x.length; j++) if (has(rules[i][1], x[j])) hit = true; } else hit = has(rules[i][1], x);
-    if (rules[i][2] ? !hit && !empty(x) : hit) return true;
-  }
-  return false;
-}
-function mandatory(id) { var m = M[id]; return m.always ? true : any(m.requiredIf || []); }
+  // ---- Which questions to check? ----------------------------------------------------------------------------------
+  if (src) {
+    // The box's name, without the "Field." style prefix Acrobat can put in front of it.
+    var changedName = String(src).replace(/^[A-Z]+\./, "");
+    // A tick-any option or a date's drop-down list is named "<question>__<number>" or "<question>__list".
+    var partOfGroup = /^(.+)__(\d+|list)$/.exec(changedName);
+    // The question that box belongs to ("" if it belongs to none).
+    var changedQuestion = "";
+    if (model[changedName]) changedQuestion = changedName;
+    else if (partOfGroup && model[partOfGroup[1]]) changedQuestion = partOfGroup[1];
 
-// What is wrong with a typed answer, or "".
-function wrong(id) {
-  var m = M[id], f = d.getField(id), s = m.kind == "date" ? val(id) : f ? f.valueAsString : "", x, k;
-  if (!m.check || !s) return "";
-  x = s.match(new RegExp("[^A-Za-z0-9 .,\\-/()':?+#&@%\\r\\n]", "g"));
-  if (x) { k = []; for (var i = 0; i < x.length; i++) if (!has(k, x[i])) k.push(x[i]); return "remove " + k.join(" ") + " (letters, digits and . , - / ( ) ' : ? + # & @ % only)"; }
-  if (m.kind == "date") { x = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(s); k = x && new Date(+x[3], x[2] - 1, +x[1]); return k && k.getDate() == +x[1] && k.getMonth() == x[2] - 1 ? "" : "not a real date (DD/MM/YYYY)"; }
-  return m.check.length && !new RegExp(m.check[0]).test(s) ? m.check[1] : "";
-}
-
-// A real DD/MM/YYYY date as a Date, or null.
-function day(s) { var x = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(s), k = x && new Date(+x[3], x[2] - 1, +x[1]); return k && k.getDate() == +x[1] && k.getMonth() == x[2] - 1 ? k : null; }
-function v(id) { return M[id] ? val(id) : ""; }
-
-// THE RULES ACROSS ANSWERS. Each rule: what it checks (one sentence), then its code. A rule that is broken puts its
-// message on the question: the box turns red, and Check form lists "<question>: <message>".
-// Rules 1-6 are the LC's own (the same as the cross-checks in pdf-template-studio's form/validate.ts); a form without
-// those questions skips them. Rules 7-9 come from the form file (FORM["checks"]), so any form can add its own.
-function isNumber(s) { return /^[\d,]+(\.\d+)?$/.test(s); }   // "1,250.50" yes, "abc" no
-function toNumber(s) { return Number(s.replace(/,/g, "")); }   // "1,250.50" -> 1250.5
-function across() {
-  var X = {};                                     // what is wrong, by question id
-  var applied  = day(v("application_date"));      // the dates as real dates (null while blank or not a date)
-  var shipment = day(v("latest_shipment_date"));
-  var expiry   = day(v("expiry_date"));
-  var amount   = v("amount");
-  var basis    = v("price_basis");
-
-  // Rule 1: the LC must not expire before the latest shipment date.
-  if (shipment && expiry && expiry < shipment) X.expiry_date = "is before the latest shipment date";
-  // Rule 2: the LC must not expire before the application date (checked only when rule 1 is fine).
-  else if (applied && expiry && expiry < applied) X.expiry_date = "is before the application date";
-
-  // Rule 3: the latest shipment date must not be before the application date.
-  if (applied && shipment && shipment < applied) X.latest_shipment_date = "is before the application date";
-
-  // Rule 4: the application date must not be in the future.
-  if (applied && applied.getTime() > new Date().getTime()) X.application_date = "is in the future";
-
-  // Rule 5: the amount must be more than zero.
-  if (isNumber(amount) && !(toNumber(amount) > 0)) X.amount = "must be more than zero";
-
-  // Rule 6: "insurance for FOB/CFR/FCA/CPT" must be left blank when the price basis is CIF or CIP
-  //         (with CIF and CIP the beneficiary arranges the insurance).
-  if (v("insurance_arrangement") && (basis == "CIF" || basis == "CIP"))
-    X.insurance_arrangement = "is only for FOB/CFR/FCA/CPT, but price basis is " + basis + " (the beneficiary insures)";
-
-  // Rules 7-9: the form file's own checks. Each is {t: kind, a: question, m: message, ...}.
-  var C = __CHECKS__, c, first, second, digits, allowed;
-  for (var j = 0; j < C.length; j++) {
-    c = C[j];
-    // Rule 7 ("order"): date a must not be before date b (with s: true, it must be after b, not the same day).
-    if (c.t == "order") {
-      first = day(v(c.a)); second = day(v(c.b));
-      if (first && second && (c.s ? first <= second : first < second)) X[c.a] = c.m;
-    }
-    // Rule 8 ("range"): number a must be between lo and hi.
-    if (c.t == "range" && isNumber(v(c.a))) {
-      if (toNumber(v(c.a)) < c.lo || toNumber(v(c.a)) > c.hi) X[c.a] = c.m;
-    }
-    // Rule 9 ("lengths"): a's digits must be one of the allowed lengths, which can depend on answer b
-    //         (e.g. an account number's length by currency; "*" = any other answer).
-    if (c.t == "lengths") {
-      digits = v(c.a).replace(/\D/g, "");
-      allowed = c.by.hasOwnProperty(v(c.b)) ? c.by[v(c.b)] : c.by["*"];
-      if (digits && allowed && allowed.length && !has(allowed, digits.length)) X[c.a] = c.m;
+    if (lcDeps) {
+      var toRecheck = changedQuestion && lcDeps[changedQuestion];   // the list of question ids that read this box
+      var changedField = d.getField(changedName);
+      var newValue = changedField ? String(changedField.value) : "";
+      // Nothing reads this box, or its value is the one the last run saw: there is nothing to do.
+      if (!toRecheck || state.v[changedName] === newValue) {
+        var nothing = [];
+        nothing.bad = [];
+        nothing.first = "";
+        return nothing;
+      }
+      state.v[changedName] = newValue;
+      onlyThese = {};
+      for (i = 0; i < toRecheck.length; i++) onlyThese[toRecheck[i]] = 1;
     }
   }
-  return X;
-}
-
-// Clears a question's box, so an answer can't stay behind in a question that doesn't apply.
-function clear(f, kind, nm) {
-  if (kind == "check" || kind == "checks" || kind == "radio") { if (f.value != "Off") { f.value = "Off"; cleared = true; } }
-  else if (f.type == "combobox" && /__list$/.test(f["name"])) { if (f.currentValueIndices != 0) { f.currentValueIndices = 0; cleared = true; } } // a date list: back to "Pick a date"
-  else if (f.value !== "" && f.value != null) { f.value = ""; cleared = true; }
-  delete S.v[nm];   // the next change of this box is new to the next run
-}
-
-// GO THROUGH EVERY QUESTION, in 5 steps, and colour (and lock) its boxes.
-var missing = [], bad = [], first = "", id, m, applies, required, problem, whatsWrong, names, i, f, X;
-calc = d.calculate; d.calculate = false;   // every write below would otherwise run the calculation again
-try {
-for (pass = 0; pass < 3; pass++) {   // a second pass only if a box was cleared (a later question may read it)
-missing = []; bad = []; first = ""; cleared = false;
-X = across();
-for (id in M) {
-  m = M[id]; if (!m.hasRule && !m.check && !m.activeIf) continue;   // no rule, no format: nothing to do
-  if (only && !only[id]) continue;                                    // this change can't affect it
-
-  // Step 1: does the question apply? (activeIf in the form file, e.g. "only when Term is picked")
-  applies = !m.activeIf || any(m.activeIf);
-
-  // Step 2: is it mandatory now, and still blank? (required=True always, or requiredIf in the form file)
-  required = m.hasRule && applies ? mandatory(id) : false;
-  problem = required && (m.kind == "check" ? val(id) != "true" : empty(val(id)));
-  if (problem) missing.push(m.label);
-
-  // Step 3: is the answer wrong? (its format, or one of the rules across answers above)
-  whatsWrong = applies ? wrong(id) || X[id] || "" : "";
-  if (whatsWrong) { bad.push(m.label + ": " + whatsWrong); problem = true; }
-
-  // Step 4: which boxes on the page are this question's (tick-any: one per option; a date: its list or its box)
-  names = [id];
-  if (m.kind == "checks") { names = []; for (i = 0; i < m.options.length; i++) names.push(id + "__" + i); }
-  if (m.kind == "date" && !shown(id) && d.getField(id + "__list")) names = [id + "__list"];
-  if (problem && !first) first = names[0];
-
-  // Step 5: colour each box. Doesn't apply: grey, locked, answer cleared. Problem: red outline, pink fill.
-  //         Fine: black outline (or just its underline), white fill.
-  sig = (required && problem ? "r" : "-") + (applies ? (problem ? "p" : "o") : "g");   // required flag, then the look
-  for (i = 0; i < names.length; i++) {
-    f = d.getField(names[i]); if (!f) continue;
-    if (S.st[names[i]] === sig) continue;   // already looks like this: every write to Acrobat is slow
-    S.st[names[i]] = sig;
-    if (m.hasRule && m.kind != "checks") f.required = !!(required && problem); // only while blank or wrong: Acrobat outlines Required boxes in red even when filled
-    if (m.activeIf) f.readonly = !applies;                                                   // locked until it applies
-    if (!applies) { clear(f, m.kind, names[i]); f.lineWidth = 1; f.strokeColor = ["G", 0.6]; f.fillColor = ["G", 0.86]; continue; } // grey, cleared
-    f.lineWidth = problem || !m.underlined ? 1 : 0;
-    f.strokeColor = problem ? color.red : m.underlined ? color.transparent : color.black;    // red when blank or wrong
-    f.fillColor = problem ? ["RGB", 1, 0.88, 0.88] : m.underlined ? color.transparent : color.white;
+  // A full run starts from scratch: forget what the last run saw, so every box is checked and written again.
+  if (!onlyThese) {
+    state.v = {};
+    state.st = {};
   }
-}
-// Amounts in words (a question with words: [amount id, currency id]), as the old bill of exchange wrote them.
-for (id in M) if (M[id].words && (!only || only[id]) && (f = d.getField(id))) { i = lcWords(v(M[id].words[0]), v(M[id].words[1] || "")); if (f.value != i) { f.value = i; delete S.v[id]; } }
-if (!cleared) break;
-}
-} catch (e) { console.println("lcRules: " + e); }
-d.calculate = calc;
-missing.bad = bad;
-missing.first = first; // the field of the first problem, for "Check form" to go to
-return missing;
+
+  // ===================================================================================================================
+  // HELPERS. They read the document d and the rules table, and are used by the checks further down.
+  // ===================================================================================================================
+
+  // Is value one of the items in list? (Loose == on purpose: a rule may list the number 1 for the text "1".)
+  function has(list, value) {
+    for (var k = 0; k < list.length; k++) {
+      if (list[k] == value) return true;
+    }
+    return false;
+  }
+
+  // A real DD/MM/YYYY date as a Date, or null (blank text, wrong shape, or a day that does not exist such as 31/02/2026).
+  // new Date() rolls 31/02 over to 03/03, so a date is real only if the day and month come back unchanged.
+  function parseDate(text) {
+    var parts = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(text);
+    if (!parts) return null;
+    var dayOfMonth = +parts[1];
+    var monthIndex = parts[2] - 1;   // Date counts months from 0
+    var date = new Date(+parts[3], monthIndex, dayOfMonth);
+    if (date.getDate() == dayOfMonth && date.getMonth() == monthIndex) return date;
+    return null;
+  }
+
+  // Is this box on the page? (A date has two boxes: the calendar box, and a drop-down list for when JavaScript is off;
+  // lcDates hides one of them.)
+  function shown(id) {
+    var field = d.getField(id);
+    return !!field && field.display != DISPLAY_HIDDEN;
+  }
+
+  // Is this answer blank? An answer is text, or a list of ticked options (for tick-any questions).
+  function empty(answer) {
+    if (typeof answer == "object") return !answer.length;
+    return answer === "";
+  }
+
+  // --- Reading an answer -----------------------------------------------------------------------------------------
+
+  // A tick-any question: the list of the options that are ticked, e.g. ["Air", "Sea"].
+  function tickedOptions(id, question) {
+    var ticked = [];
+    for (var k = 0; k < question.options.length; k++) {
+      var option = d.getField(id + "__" + k);   // one tick box per option
+      if (option && option.value != OFF) ticked.push(question.options[k]);
+    }
+    return ticked;
+  }
+
+  // The drop-down list's text "05 Mar 2026" as "05/03/2026" ("" while it still says "Pick a date").
+  function dateFromList(text) {
+    var parts = /^(\d\d) (\w{3}) (\d{4})$/.exec(text);
+    if (!parts) return "";
+    var monthNumber = ("0" + (MONTH_NAMES.indexOf(parts[2]) / 3 + 1)).slice(-2);   // "Mar" -> 6 / 3 + 1 -> "03"
+    return parts[1] + "/" + monthNumber + "/" + parts[3];
+  }
+
+  // The answer to question id, read from the PDF's fields:
+  //   tick-any  -> a list of the ticked options
+  //   date      -> "DD/MM/YYYY" text, from the calendar box (or from the drop-down list when that is the one showing)
+  //   tick box  -> "true" or "false"
+  //   anything else -> its text ("" if blank, or an option group with nothing picked)
+  function val(id) {
+    var question = model[id];
+    if (question.kind == "checks") return tickedOptions(id, question);
+    if (question.kind == "date") {
+      if (shown(id)) return d.getField(id).valueAsString;
+      var listBox = d.getField(id + "__list");
+      if (listBox) return dateFromList(listBox.valueAsString);
+    }
+    var field = d.getField(id);
+    if (!field) return "";
+    if (question.kind == "check") return field.value != OFF ? "true" : "false";
+    return field.value == OFF ? "" : String(field.value);
+  }
+
+  // The answer to question id, or "" when the form has no such question (other forms lack some of the LC's questions).
+  function v(id) {
+    if (model[id]) return val(id);
+    return "";
+  }
+
+  // --- "Applies only if" and "mandatory if" ----------------------------------------------------------------------
+
+  // Does the answer (text, or list of ticked options) include one of the values?
+  function matchesAny(answer, values) {
+    if (typeof answer != "object") return has(values, answer);
+    for (var k = 0; k < answer.length; k++) {
+      if (has(values, answer[k])) return true;
+    }
+    return false;
+  }
+
+  // Does any of these conditions hold? Each condition is [question id, values, not]:
+  //   not = 0: holds when the answer to that question is one of the values.     e.g. ["mode", ["Air"], 0]
+  //   not = 1: holds when it is answered, but not with one of the values.       e.g. ["mode", ["Air"], 1]
+  // Used for activeIf ("this question applies only if ...") and requiredIf ("this question is mandatory if ...").
+  function any(conditions) {
+    for (var k = 0; k < conditions.length; k++) {
+      var questionId = conditions[k][0];
+      var values = conditions[k][1];
+      var negate = conditions[k][2];
+      var answer = val(questionId);
+      var matches = matchesAny(answer, values);
+      if (negate) {
+        if (!matches && !empty(answer)) return true;
+      } else if (matches) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Must this question be answered right now? Always (always: true), or when one of its requiredIf conditions holds.
+  function mandatory(id) {
+    var question = model[id];
+    if (question.always) return true;
+    return any(question.requiredIf || []);
+  }
+
+  // --- Is the typed answer wrong? --------------------------------------------------------------------------------
+
+  // The characters in text that are not allowed, each once, in order of appearance ([] when all are fine).
+  function disallowedCharacters(text) {
+    var found = text.match(new RegExp(OTHER_CHARACTERS, "g")) || [];
+    var each = [];
+    for (var k = 0; k < found.length; k++) {
+      if (!has(each, found[k])) each.push(found[k]);
+    }
+    return each;
+  }
+
+  // What is wrong with the typed answer, as a sentence for the "bad" list; "" when it is fine or blank.
+  // Three checks, in this order, and the first that fails wins:
+  //   1. only the allowed characters             "remove ~ ^ (letters, digits and ...)"
+  //   2. a date is a real date                   "not a real date (DD/MM/YYYY)"
+  //   3. the question's own pattern (a regular expression and its message from the form file)
+  // Only questions with a "check" in the rules table are checked at all.
+  function wrong(id) {
+    var question = model[id];
+    var text = "";
+    if (question.kind == "date") {
+      text = val(id);
+    } else {
+      var field = d.getField(id);
+      if (field) text = field.valueAsString;
+    }
+    if (!question.check || !text) return "";
+
+    var disallowed = disallowedCharacters(text);
+    if (disallowed.length) return "remove " + disallowed.join(" ") + " (letters, digits and . , - / ( ) ' : ? + # & @ % only)";
+
+    if (question.kind == "date") return parseDate(text) ? "" : "not a real date (DD/MM/YYYY)";
+
+    // question.check is [pattern, message], or just the number 1 ("allowed characters only", which was checked above).
+    if (question.check.length && !new RegExp(question.check[0]).test(text)) return question.check[1];
+    return "";
+  }
+
+  // ===================================================================================================================
+  // THE RULES ACROSS ANSWERS. Each rule: what it checks (one sentence and an example), then its code. A rule that is
+  // broken puts its message on the question: the box turns red, and Check form lists "<question>: <message>".
+  // Rules 1-6 are the LC's own (the same as the cross-checks in pdf-template-studio's form/validate.ts); a form without
+  // those questions skips them (v() gives "" for a question the form does not have). Rules 7-9 come from the form file
+  // (FORM["checks"]), so any form can add its own.
+  // ===================================================================================================================
+
+  // Is this text a number such as "1,250.50"? ("abc" and "" are not.)
+  function isNumber(text) {
+    return /^[\d,]+(\.\d+)?$/.test(text);
+  }
+
+  // "1,250.50" -> 1250.5
+  function toNumber(text) {
+    return Number(text.replace(/,/g, ""));
+  }
+
+  // Runs every rule across answers. Returns what is wrong, by question id: {question id: message}.
+  function across() {
+    var problems = {};
+    // The dates as real dates (null while blank or not a date, so a rule that needs both dates is skipped).
+    var applicationDate = parseDate(v("application_date"));
+    var shipmentDate = parseDate(v("latest_shipment_date"));
+    var expiryDate = parseDate(v("expiry_date"));
+    var amount = v("amount");
+    var priceBasis = v("price_basis");
+
+    // Rule 1: the LC must not expire before the latest shipment date.
+    //         e.g. expiry 01/03/2026, latest shipment 15/03/2026 -> expiry_date: is before the latest shipment date
+    if (shipmentDate && expiryDate && expiryDate < shipmentDate) {
+      problems.expiry_date = "is before the latest shipment date";
+    }
+    // Rule 2: the LC must not expire before the application date (checked only when rule 1 is fine, so a question
+    //         never shows two messages).
+    //         e.g. application 10/03/2026, expiry 01/03/2026 (no shipment date yet) -> expiry_date: is before the application date
+    else if (applicationDate && expiryDate && expiryDate < applicationDate) {
+      problems.expiry_date = "is before the application date";
+    }
+
+    // Rule 3: the latest shipment date must not be before the application date.
+    //         e.g. application 10/03/2026, latest shipment 05/03/2026 -> latest_shipment_date: is before the application date
+    if (applicationDate && shipmentDate && shipmentDate < applicationDate) {
+      problems.latest_shipment_date = "is before the application date";
+    }
+
+    // Rule 4: the application date must not be in the future.
+    //         e.g. today is 27/11/2026, application 28/11/2026 -> application_date: is in the future
+    if (applicationDate && applicationDate.getTime() > new Date().getTime()) {
+      problems.application_date = "is in the future";
+    }
+
+    // Rule 5: the amount must be more than zero (only once it is a number).
+    //         e.g. amount 0.00 -> amount: must be more than zero
+    if (isNumber(amount) && !(toNumber(amount) > 0)) {
+      problems.amount = "must be more than zero";
+    }
+
+    // Rule 6: "insurance for FOB/CFR/FCA/CPT" must be left blank when the price basis is CIF or CIP
+    //         (with CIF and CIP the beneficiary arranges the insurance).
+    //         e.g. price basis CIF and an insurance arrangement filled in ->
+    //              insurance_arrangement: is only for FOB/CFR/FCA/CPT, but price basis is CIF (the beneficiary insures)
+    if (v("insurance_arrangement") && (priceBasis == "CIF" || priceBasis == "CIP")) {
+      problems.insurance_arrangement = "is only for FOB/CFR/FCA/CPT, but price basis is " + priceBasis + " (the beneficiary insures)";
+    }
+
+    // Rules 7-9: the form file's own checks. Each is {t: kind, a: question, m: message, ...}, tried in the order the
+    // form file lists them (a later one replaces an earlier message on the same question).
+    var formChecks = __CHECKS__;
+    for (var j = 0; j < formChecks.length; j++) {
+      var check = formChecks[j];
+
+      // Rule 7 ("order"): date a must not be before date b (with s: true it must be after b: the same day is not enough).
+      //         e.g. {t: "order", a: "expiry_date", b: "issue_date", m: "is before the issue date"},
+      //         expiry 01/03/2026, issue 05/03/2026 -> expiry_date: is before the issue date
+      if (check.t == "order") {
+        var dateA = parseDate(v(check.a));
+        var dateB = parseDate(v(check.b));
+        if (dateA && dateB) {
+          var tooEarly = check.s ? dateA <= dateB : dateA < dateB;
+          if (tooEarly) problems[check.a] = check.m;
+        }
+      }
+
+      // Rule 8 ("range"): number a must be between lo and hi.
+      //         e.g. {t: "range", a: "tolerance", lo: 0, hi: 10, m: "must be between 0 and 10"}, tolerance 15 -> that message
+      if (check.t == "range") {
+        var rangeAnswer = v(check.a);
+        if (isNumber(rangeAnswer)) {
+          var rangeNumber = toNumber(rangeAnswer);
+          if (rangeNumber < check.lo || rangeNumber > check.hi) problems[check.a] = check.m;
+        }
+      }
+
+      // Rule 9 ("lengths"): a's digits (ignoring spaces, dashes ...) must be one of the allowed lengths, which can depend
+      //         on the answer to b (e.g. an account number's length by currency; "*" = any other answer).
+      //         e.g. {t: "lengths", a: "account", b: "currency", by: {"USD": [10], "*": [8, 9]}, m: "..."},
+      //         currency USD and an account number of 9 digits -> that message
+      if (check.t == "lengths") {
+        var digits = v(check.a).replace(/\D/g, "");
+        var otherAnswer = v(check.b);
+        var allowedLengths = check.by.hasOwnProperty(otherAnswer) ? check.by[otherAnswer] : check.by["*"];
+        if (digits && allowedLengths && allowedLengths.length && !has(allowedLengths, digits.length)) {
+          problems[check.a] = check.m;
+        }
+      }
+    }
+    return problems;
+  }
+
+  // ===================================================================================================================
+  // WRITING THE LOOK OF A BOX
+  // ===================================================================================================================
+
+  // Empties a box of a question that does not apply, so an answer can't stay behind in a locked question.
+  //   field  the box;  kind  its question's kind;  boxName  the box's name.
+  // Sets "cleared" when it really changed an answer (a second pass then re-checks the questions that read it).
+  function clearAnswer(field, kind, boxName) {
+    if (kind == "check" || kind == "checks" || kind == "radio") {
+      if (field.value != OFF) {
+        field.value = OFF;
+        cleared = true;
+      }
+    } else if (field.type == "combobox" && /__list$/.test(field["name"])) {
+      // A date's drop-down list: back to its first line, "Pick a date".
+      if (field.currentValueIndices != 0) {
+        field.currentValueIndices = 0;
+        cleared = true;
+      }
+    } else if (field.value !== "" && field.value != null) {
+      field.value = "";
+      cleared = true;
+    }
+    delete state.v[boxName];   // the next change of this box is new to the next run
+  }
+
+  // A box of a question that does not apply: grey, locked (the caller does that), answer cleared.
+  function paintGrey(field, kind, boxName) {
+    clearAnswer(field, kind, boxName);
+    field.lineWidth = 1;
+    field.strokeColor = GREY_LINE;
+    field.fillColor = GREY_FILL;
+  }
+
+  // A box of a question that applies. A problem (blank mandatory, or wrong): red outline, pink fill. Fine: black outline
+  // and white fill; or, for an "underlined" question (just a line to write on): no outline, a transparent fill, and
+  // only its underline.
+  function paintActive(field, underlined, problem) {
+    field.lineWidth = problem || !underlined ? 1 : 0;
+    if (problem) {
+      field.strokeColor = color.red;
+      field.fillColor = PINK_FILL;
+    } else if (underlined) {
+      field.strokeColor = color.transparent;
+      field.fillColor = color.transparent;
+    } else {
+      field.strokeColor = color.black;
+      field.fillColor = color.white;
+    }
+  }
+
+  // The names of the boxes on the page that belong to a question:
+  //   tick-any  one box per option ("<id>__0", "<id>__1" ...)
+  //   a date    its calendar box, or its drop-down list ("<id>__list") when the list is the one showing
+  //   otherwise the question's own box
+  function boxesOf(id, question) {
+    var names = [id];
+    if (question.kind == "checks") {
+      names = [];
+      for (var k = 0; k < question.options.length; k++) names.push(id + "__" + k);
+    }
+    if (question.kind == "date" && !shown(id) && d.getField(id + "__list")) names = [id + "__list"];
+    return names;
+  }
+
+  // ===================================================================================================================
+  // GO THROUGH EVERY QUESTION, in 5 steps, and colour (and lock) its boxes.
+  // ===================================================================================================================
+  var missing = [];        // labels of the mandatory questions still blank
+  var bad = [];            // "<label>: <what is wrong>" for each wrong answer
+  var firstProblem = "";   // the box of the first question with a problem
+  var id, question, applies, required, problem, whatsWrong, boxNames, lookKey, field, boxName, wordsField, words;
+  var calculateWas = d.calculate;
+  d.calculate = false;   // every write below would otherwise run the calculation again
+  try {
+    // A second pass only if a box was cleared (a later question may read it). Three passes at most.
+    for (var pass = 0; pass < 3; pass++) {
+      missing = [];
+      bad = [];
+      firstProblem = "";
+      cleared = false;
+      var wrongAcross = across();   // what the rules across answers found, by question id
+
+      for (id in model) {
+        question = model[id];
+        if (!question.hasRule && !question.check && !question.activeIf) continue;   // no rule, no format: nothing to do
+        if (onlyThese && !onlyThese[id]) continue;                                  // this change can't affect it
+
+        // Step 1: does the question apply? (activeIf in the form file, e.g. "only when Term is picked")
+        applies = !question.activeIf || any(question.activeIf);
+
+        // Step 2: is it mandatory now, and still blank? (always: true, or requiredIf in the form file)
+        required = false;
+        if (question.hasRule && applies) required = mandatory(id);
+        if (required) {
+          if (question.kind == "check") problem = val(id) != "true";   // a tick box is "blank" when not ticked
+          else problem = empty(val(id));
+        } else {
+          problem = false;
+        }
+        if (problem) missing.push(question.label);
+
+        // Step 3: is the answer wrong? (its format, or one of the rules across answers above)
+        whatsWrong = "";
+        if (applies) whatsWrong = wrong(id) || wrongAcross[id] || "";
+        if (whatsWrong) {
+          bad.push(question.label + ": " + whatsWrong);
+          problem = true;
+        }
+
+        // Step 4: which boxes on the page are this question's (tick-any: one per option; a date: its list or its box)
+        boxNames = boxesOf(id, question);
+        if (problem && !firstProblem) firstProblem = boxNames[0];
+
+        // Step 5: colour each box. Doesn't apply: grey, locked, answer cleared. Problem: red outline, pink fill.
+        //         Fine: black outline (or just its underline), white fill.
+        // lookKey sums up the look in two or three letters: "r" if marked Required, then "p" (problem), "o" (fine) or
+        // "g" (greyed). A box that already has this look is skipped: every write to Acrobat is slow.
+        lookKey = (required && problem ? "r" : "-") + (applies ? (problem ? "p" : "o") : "g");
+        for (i = 0; i < boxNames.length; i++) {
+          boxName = boxNames[i];
+          field = d.getField(boxName);
+          if (!field) continue;
+          if (state.st[boxName] === lookKey) continue;
+          state.st[boxName] = lookKey;
+          // Required only while blank or wrong: Acrobat outlines Required boxes in red even when they are filled.
+          if (question.hasRule && question.kind != "checks") field.required = !!(required && problem);
+          if (question.activeIf) field.readonly = !applies;   // locked until it applies
+          if (applies) paintActive(field, question.underlined, problem);
+          else paintGrey(field, question.kind, boxName);
+        }
+      }
+
+      // Amounts in words (a question with words: [amount id, currency id]), as the old bill of exchange wrote them.
+      for (id in model) {
+        question = model[id];
+        if (!question.words) continue;
+        if (onlyThese && !onlyThese[id]) continue;
+        wordsField = d.getField(id);
+        if (!wordsField) continue;
+        words = lcWords(v(question.words[0]), v(question.words[1] || ""));
+        if (wordsField.value != words) {
+          wordsField.value = words;
+          delete state.v[id];
+        }
+      }
+
+      if (!cleared) break;
+    }
+  } catch (e) {
+    console.println("lcRules: " + e);
+  }
+  d.calculate = calculateWas;
+
+  missing.bad = bad;
+  missing.first = firstProblem;   // the field of the first problem, for "Check form" to go to
+  return missing;
 }
 
-// "1,250.50", "USD" -> "USD One Thousand Two Hundred Fifty and Fifty cents only" ("" while the amount is blank).
-function lcWords(a, ccy) {
-  var D = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"],
-      T = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"], G = ["", " Thousand", " Million", " Billion", " Trillion"];
-  var s = String(a).replace(/[, ]/g, ""), m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(s), out = [], n, g, k;
-  if (!m) return "";
-  function three(x) { var h = Math.floor(x / 100), r = x % 100, w = [];
-    if (h) w.push(D[h] + " Hundred"); if (r >= 20) w.push(T[Math.floor(r / 10)] + (r % 10 ? " " + D[r % 10] : "")); else if (r) w.push(D[r]); return w.join(" "); }
-  function words(t) { t = t.replace(/^0+/, ""); if (!t) return "Zero"; var parts = []; for (g = 0; t.length; g++) { n = +t.slice(-3); t = t.slice(0, -3); if (n) parts.unshift(three(n) + G[g]); } return parts.join(" "); }
-  k = words(m[1]);
-  if (m[2] && +m[2]) k += " and " + words(m[2].length == 1 ? m[2] + "0" : m[2]) + " cents";
-  return (ccy ? ccy + " " : "") + k + " only";
+// ---------------------------------------------------------------------------------------------------------------------
+// lcWords(amount, currency): an amount in words.
+//   "1,250.50", "USD" -> "USD One Thousand Two Hundred Fifty and Fifty cents only"
+//   "" or text that is not an amount -> "" (the words stay blank until the amount is filled in)
+// ---------------------------------------------------------------------------------------------------------------------
+function lcWords(amount, currency) {
+  var ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+              "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  var TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  var SCALES = ["", " Thousand", " Million", " Billion", " Trillion"];   // the name of each group of 3 digits
+
+  // Whole part and (up to 2-digit) cents part: "1250.5" -> "1250" and "5". No commas or spaces are allowed to remain.
+  var amountText = String(amount).replace(/[, ]/g, "");
+  var parts = /^(\d+)(?:\.(\d{1,2}))?$/.exec(amountText);
+  if (!parts) return "";
+
+  // 1 to 999 in words: 305 -> "Three Hundred Five", 42 -> "Forty Two".
+  function belowThousand(number) {
+    var hundreds = Math.floor(number / 100);
+    var rest = number % 100;
+    var pieces = [];
+    if (hundreds) pieces.push(ONES[hundreds] + " Hundred");
+    if (rest >= 20) {
+      var tens = TENS[Math.floor(rest / 10)];
+      if (rest % 10) tens = tens + " " + ONES[rest % 10];
+      pieces.push(tens);
+    } else if (rest) {
+      pieces.push(ONES[rest]);
+    }
+    return pieces.join(" ");
+  }
+
+  // A string of digits in words: "1250" -> "One Thousand Two Hundred Fifty"; "" or "000" -> "Zero".
+  // It works from the right in groups of 3 digits (units, thousands, millions ...) and skips an all-zero group.
+  function digitsInWords(digits) {
+    digits = digits.replace(/^0+/, "");
+    if (!digits) return "Zero";
+    var groups = [];
+    for (var scale = 0; digits.length; scale++) {
+      var group = +digits.slice(-3);
+      digits = digits.slice(0, -3);
+      if (group) groups.unshift(belowThousand(group) + SCALES[scale]);
+    }
+    return groups.join(" ");
+  }
+
+  var words = digitsInWords(parts[1]);
+  if (parts[2] && +parts[2]) {
+    // One digit after the point is tenths of a dollar: "0.5" means 50 cents, not 5.
+    var cents = parts[2].length == 1 ? parts[2] + "0" : parts[2];
+    words += " and " + digitsInWords(cents) + " cents";
+  }
+  return (currency ? currency + " " : "") + words + " only";
 }
-// Acrobat only: show each date's calendar box and hide its drop-down list.
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcDates(d): Acrobat only. Shows each date's calendar box and hides its drop-down list.
+// A date question has two boxes: the calendar box (works with JavaScript) and a plain drop-down list of real dates
+// (the fallback for when JavaScript is off). The list below is filled in when the PDF is built: the ids of the date questions.
+// ---------------------------------------------------------------------------------------------------------------------
 function lcDates(d) {
-  var D = __DATES__, i, t, p;
-  for (i = 0; i < D.length; i++) { t = d.getField(D[i]); if (!t) continue; t.display = display.visible;
-    p = d.getField(D[i] + "__list"); if (p) p.display = display.hidden; }
+  var dateIds = __DATES__;
+  for (var i = 0; i < dateIds.length; i++) {
+    var calendarBox = d.getField(dateIds[i]);
+    if (!calendarBox) continue;
+    calendarBox.display = display.visible;
+    var listBox = d.getField(dateIds[i] + "__list");
+    if (listBox) listBox.display = display.hidden;
+  }
 }
+
 // When the warning before saving / printing was last closed. Some Acrobat versions (seen on Windows) fire the
 // save / print events several times in a row; the warning then shows once, not once per event.
 var lcWarnedAt = 0;
+
 // On opening in Acrobat: show the calendars, and set every box's colour and lock.
-if (typeof app != "undefined" && /^(Exchange|Reader)/.test(app.viewerType)) { lcDates(this); lcRules(this); }
+if (typeof app != "undefined" && /^(Exchange|Reader)/.test(app.viewerType)) {
+  lcDates(this);
+  lcRules(this);
+}
 // THE QR CODES' TEXT. lcPayload(doc) returns every answered question as JSON:
 //   {"form": "LC-01", "version": "1.0", "saved": "...", "complete": true, "data": {field id: answer, ...}}
 // Tick boxes become true; "tick any" questions become lists of the ticked options. One QR code holds 2,300 bytes of it
