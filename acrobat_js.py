@@ -608,441 +608,1159 @@ if (typeof app != "undefined" && /^(Exchange|Reader)/.test(app.viewerType)) {
   lcDates(this);
   lcRules(this);
 }
-// THE QR CODES' TEXT. lcPayload(doc) returns every answered question as JSON:
-//   {"form": "LC-01", "version": "1.0", "saved": "...", "complete": true, "data": {field id: answer, ...}}
-// Tick boxes become true; "tick any" questions become lists of the ticked options. One QR code holds 2,300 bytes of it
-// (LC_QR_CAP); longer answers take as many codes as they need, at most 16 (LC_QR_MAX, the most that "structured append"
-// allows; lcDrawQr splits the text). The text is padded with spaces to fill the codes it needs: 2,300, 4,600 ... 36,800
-// bytes. Only beyond 16 codes are the long paragraphs shortened (and listed in "truncated"). __GROUPS__, __LONG__,
-// __FORM__ and __VERSION__ are filled in by document_script (step 2).
-var LC_QR_CAP = 2300, LC_QR_MAX = 16;
-// The text as UTF-8 bytes, one character per byte (what goes into the codes).
-function lcBytes(s) { return unescape(encodeURIComponent(s)); }
-// How many codes this text needs (0 for no text).
-function lcCodes(s) { return s ? Math.ceil(lcBytes(s).length / LC_QR_CAP) : 0; }
+
+// =====================================================================================================================
+// THE QR CODES' TEXT
+//
+// What this does: lcPayload(doc) reads every answered question and returns them as one piece of text (JSON), which
+// the QR codes then carry. JSON is plain text that a computer can read back, like this:
+//   {"form": "LC-01", "version": "1.0", "saved": "2026-11-27T10:30", "complete": true, "data": {"amount": "1,250.50", ...}}
+// How answers look in it: a ticked tick box becomes true. A "tick any" question becomes the list of options that are
+// ticked. A blank question is left out.
+//
+// How big it can be: one QR code holds 2,300 bytes (LC_QR_CAP). A longer text needs more codes, at most 16 (LC_QR_MAX):
+// 16 is the most that "structured append" allows (that is the part of the QR standard that lets codes say "I am
+// code 2 of 3"). lcDrawQr cuts the text into slices, one per code.
+// The text is padded with spaces so it fills the codes it needs exactly: 2,300, 4,600 ... 36,800 bytes.
+// Only if the answers are longer than 16 codes can hold, the long paragraphs are shortened (and listed in "truncated").
+//
+// The names FORM, VERSION, GROUPS and LONG in capitals below are filled in when the PDF is built (document_script in
+// pdf_writer.py).
+// =====================================================================================================================
+var LC_QR_CAP = 2300;   // bytes in one QR code
+var LC_QR_MAX = 16;     // most codes for one form
+
+// The text as UTF-8 bytes, one character per byte (what really goes into the codes).
+// Example: "A" is 1 byte, but a letter with an accent is 2 bytes, so the byte count can be bigger than the letter count.
+function lcBytes(text) {
+  return unescape(encodeURIComponent(text));
+}
+
+// How many codes this text needs (0 for no text). Example: 2,301 bytes -> 2 codes.
+function lcCodes(text) {
+  if (!text) return 0;
+  return Math.ceil(lcBytes(text).length / LC_QR_CAP);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcPayload(d): every answered question as JSON text (see above).
+//   d  the PDF document.
+// Returns the text, padded with spaces to fill whole codes.
+// ---------------------------------------------------------------------------------------------------------------------
 function lcPayload(d) {
-var G = {__GROUPS__}, LONG = __LONG__, CAP = LC_QR_CAP, BUDGET = LC_QR_MAX * LC_QR_CAP;
-var data = {}, i, n, f, k, v, g, m, out, cut = [], ok = true, t = new Date();
-for (i = 0; i < d.numFields; i++) {
-  n = d.getNthFieldName(i); if (/^__/.test(n) || /__list$/.test(n) || /__qrx_/.test(n)) continue;
-  f = d.getField(n); if (!f || f.type == "button" || f.type == "signature") continue;
-  g = /^(.+)__(\d+)$/.exec(n);
-  if (g && G[g[1]]) { if (f.value != "Off") { if (!data[g[1]]) data[g[1]] = []; data[g[1]].push(G[g[1]][+g[2]]); } continue; }
-  if (f.type == "checkbox") { if (f.value != "Off") data[n] = true; continue; }
-  v = f.type == "radiobutton" ? (f.value == "Off" ? "" : String(f.value)) : String(f.valueAsString).replace(/^\s+|\s+$/g, "");
-  if (v !== "") data[n] = v;
-}
-if (typeof lcRules == "function") { m = lcRules(d); ok = !m.length && !(m.bad || []).length; }
-function pad(x) { return ("0" + x).slice(-2); }
-out = {"form": __FORM__, "version": __VERSION__, "saved": t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate()) + "T" + pad(t.getHours()) + ":" + pad(t.getMinutes()), "complete": ok, "data": data};
-// 16 codes hold 36,800 bytes: only if the answers are longer still, shorten the long paragraphs (in order) and say so.
-for (i = 0; i < LONG.length && lcBytes(JSON.stringify(out)).length > BUDGET; i++) {
-  k = LONG[i]; if (!data[k]) continue;
-  cut.push(k); out.truncated = cut;
-  v = lcBytes(JSON.stringify(out)).length - BUDGET + 3;
-  data[k] = v < data[k].length ? data[k].slice(0, data[k].length - v) + "..." : "...";
-}
-// Padded with spaces to fill the codes it needs (2,300 bytes each).
-v = JSON.stringify(out); n = lcBytes(v).length; m = Math.max(1, Math.ceil(n / CAP)) * CAP - (n - v.length);
-while (v.length < m) v += " ";
-return v;
-}
-// THE QR CODE ENCODER AND DRAWING (standard QR code, no library needed).
-// lcQrMatrix(bytes, part) returns the 177 x 177 grid of a version 40 QR code (true = dark square). bytes is the
-// text as UTF-8 bytes (one character per byte). part is null for a single code, or [index, total, parity] for
-// one of several codes ("structured append", part of the QR standard: each code says it is code k of n, n at
-// most 16, so a scanner that supports it joins them; any other scanner reads each code's text, and the texts are
-// joined in order). Version 40, error correction M, byte mode, mask 0; at most 2,329 bytes per code.
-function lcQrMatrix(s, part) {
-  var N = 177, i, j, x, y, m = [], f = [], bytes = [];
-  for (i = 0; i < s.length; i++) bytes.push(s.charCodeAt(i) & 255);
-  for (y = 0; y < N; y++) { m.push([]); f.push([]); for (x = 0; x < N; x++) { m[y].push(false); f[y].push(false); } }
-  function set(x, y, dark) { m[y][x] = dark; f[y][x] = true; }
-  function mul(a, b) { var z = 0; for (var k = 7; k >= 0; k--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((b >>> k) & 1) * a; } return z; }
-  // Function patterns: timing, finders, alignment, format area, version, dark module.
-  for (i = 0; i < N; i++) { set(6, i, i % 2 == 0); set(i, 6, i % 2 == 0); }
-  function finder(cx, cy) { for (var dy = -4; dy <= 4; dy++) for (var dx = -4; dx <= 4; dx++) {
-    var d = Math.max(Math.abs(dx), Math.abs(dy)), xx = cx + dx, yy = cy + dy;
-    if (xx >= 0 && xx < N && yy >= 0 && yy < N) set(xx, yy, d != 2 && d != 4); } }
-  finder(3, 3); finder(N - 4, 3); finder(3, N - 4);
-  var A = [6, 30, 58, 86, 114, 142, 170];
-  for (i = 0; i < A.length; i++) for (j = 0; j < A.length; j++) {
-    if ((i == 0 && j == 0) || (i == 0 && j == A.length - 1) || (i == A.length - 1 && j == 0)) continue;
-    for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) set(A[i] + dx, A[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) != 1);
+  var GROUPS = {__GROUPS__};     // "tick any" questions: question id -> its list of options, in order
+  var LONG_QUESTIONS = __LONG__; // the long paragraph questions, which may be shortened if the answers are too big
+  var budget = LC_QR_MAX * LC_QR_CAP;   // the most bytes 16 codes can hold
+  var data = {};                 // the answers: question id -> answer
+  var truncated = [];            // ids of the questions that had to be shortened
+  var i, n, field, partOfGroup, answer, check;
+  var now = new Date();
+
+  // 1. Go through every box in the PDF and note the answers.
+  // The box's name is kept in the variable n and the line below is written in exactly this way on purpose: build_all.py
+  // finds that line and adds a filter to it, so that one form of the joined PDF does not read another form's boxes.
+  for (i = 0; i < d.numFields; i++) {
+    n = d.getNthFieldName(i);
+    // Skip the form's own helper boxes (their names start with two underscores), the date drop-down lists, and the
+    // extra QR code pages' rows.
+    if (/^__/.test(n) || /__list$/.test(n) || /__qrx_/.test(n)) continue;
+    field = d.getField(n);
+    if (!field || field.type == "button" || field.type == "signature") continue;
+
+    // One option of a "tick any" question is named "<question>__<number>": add the option to the question's list.
+    partOfGroup = /^(.+)__(\d+)$/.exec(n);
+    if (partOfGroup && GROUPS[partOfGroup[1]]) {
+      if (field.value != "Off") {
+        if (!data[partOfGroup[1]]) data[partOfGroup[1]] = [];
+        data[partOfGroup[1]].push(GROUPS[partOfGroup[1]][+partOfGroup[2]]);
+      }
+      continue;
+    }
+    // A single tick box: true when ticked, left out when not.
+    if (field.type == "checkbox") {
+      if (field.value != "Off") data[n] = true;
+      continue;
+    }
+    // Option buttons give the picked option; text boxes give the text without blanks at the start and end.
+    if (field.type == "radiobutton") {
+      answer = field.value == "Off" ? "" : String(field.value);
+    } else {
+      answer = String(field.valueAsString).replace(/^\s+|\s+$/g, "");
+    }
+    if (answer !== "") data[n] = answer;
   }
-  var rem = 0, fmt; for (i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
-  fmt = ((0 << 10) | rem) ^ 0x5412; // error correction M (00), mask 0
-  function bit(v, k) { return ((v >>> k) & 1) != 0; }
-  for (i = 0; i <= 5; i++) set(8, i, bit(fmt, i));
-  set(8, 7, bit(fmt, 6)); set(8, 8, bit(fmt, 7)); set(7, 8, bit(fmt, 8));
-  for (i = 9; i < 15; i++) set(14 - i, 8, bit(fmt, i));
-  for (i = 0; i < 8; i++) set(N - 1 - i, 8, bit(fmt, i));
-  for (i = 8; i < 15; i++) set(8, N - 15 + i, bit(fmt, i));
-  set(8, N - 8, true);
-  rem = 40; for (i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
-  var ver = (40 << 12) | rem;
-  for (i = 0; i < 18; i++) { var a = N - 11 + i % 3, b = Math.floor(i / 3); set(a, b, bit(ver, i)); set(b, a, bit(ver, i)); }
-  // Data: (for one of several codes: mode 0011, its index, the total - 1, the parity of all the text), then mode
-  // 0100, 16-bit length, the bytes, terminator, padding to 2,334 data codewords.
-  var bits = [], cap = 2334 * 8;
-  function put(v, n) { for (var k = n - 1; k >= 0; k--) bits.push((v >>> k) & 1); }
-  if (part) { put(3, 4); put(part[0], 4); put(part[1] - 1, 4); put(part[2], 8); }
-  put(4, 4); put(bytes.length, 16); for (i = 0; i < bytes.length; i++) put(bytes[i], 8);
-  if (bits.length > cap) throw new Error("too much text for one QR code (" + bytes.length + " bytes)");
-  put(0, Math.min(4, cap - bits.length)); while (bits.length % 8) bits.push(0);
-  var data = []; for (i = 0; i < bits.length; i += 8) { var v = 0; for (j = 0; j < 8; j++) v = (v << 1) | bits[i + j]; data.push(v); }
-  for (i = 0; data.length < 2334; i++) data.push(i % 2 ? 0x11 : 0xEC);
-  // Reed-Solomon: 49 blocks (18 of 47 + 31 of 48 data codewords), 28 error-correction codewords each.
-  var div = [], root = 1; for (i = 0; i < 27; i++) div.push(0); div.push(1);
-  for (i = 0; i < 28; i++) { for (j = 0; j < 28; j++) { div[j] = mul(div[j], root); if (j + 1 < 28) div[j] ^= div[j + 1]; } root = mul(root, 2); }
-  var blocks = [], k = 0;
-  for (i = 0; i < 49; i++) {
-    var len = i < 18 ? 47 : 48, dat = data.slice(k, k + len), ecc = []; k += len;
-    for (j = 0; j < 28; j++) ecc.push(0);
-    for (j = 0; j < dat.length; j++) { var fct = dat[j] ^ ecc.shift(); ecc.push(0); for (var t = 0; t < 28; t++) ecc[t] ^= mul(div[t], fct); }
-    if (i < 18) dat.push(-1);
-    blocks.push(dat.concat(ecc));
+
+  // 2. Is the form complete (nothing missing, nothing wrong)? Ask the rules engine.
+  var complete = true;
+  if (typeof lcRules == "function") {
+    check = lcRules(d);
+    complete = !check.length && !(check.bad || []).length;
   }
-  var all = [];
-  for (i = 0; i < blocks[0].length; i++) for (j = 0; j < 49; j++) if (blocks[j][i] != -1) all.push(blocks[j][i]);
-  // Place the codewords in the zigzag, then mask 0 ((x + y) even flips).
-  var n = 0;
-  for (var right = N - 1; right >= 1; right -= 2) {
-    if (right == 6) right = 5;
-    for (var vert = 0; vert < N; vert++) for (j = 0; j < 2; j++) {
-      x = right - j; var up = ((right + 1) & 2) == 0; y = up ? N - 1 - vert : vert;
-      if (!f[y][x] && n < all.length * 8) { m[y][x] = ((all[n >>> 3] >>> (7 - (n & 7))) & 1) != 0; n++; }
+
+  // 3. Put it together. Two digits for a date part: 5 -> "05".
+  function twoDigits(number) {
+    return ("0" + number).slice(-2);
+  }
+  var saved = now.getFullYear() + "-" + twoDigits(now.getMonth() + 1) + "-" + twoDigits(now.getDate()) +
+              "T" + twoDigits(now.getHours()) + ":" + twoDigits(now.getMinutes());
+  var out = {"form": __FORM__, "version": __VERSION__, "saved": saved, "complete": complete, "data": data};
+
+  // 4. 16 codes hold 36,800 bytes. Only if the answers are longer still: shorten the long paragraphs, one after the
+  // other, until it fits, and say which ones in "truncated".
+  var tooMany;
+  for (i = 0; i < LONG_QUESTIONS.length && lcBytes(JSON.stringify(out)).length > budget; i++) {
+    var longId = LONG_QUESTIONS[i];
+    if (!data[longId]) continue;
+    truncated.push(longId);
+    out.truncated = truncated;
+    // How many bytes are still too many (plus 3 for the "..." that marks the cut).
+    tooMany = lcBytes(JSON.stringify(out)).length - budget + 3;
+    if (tooMany < data[longId].length) data[longId] = data[longId].slice(0, data[longId].length - tooMany) + "...";
+    else data[longId] = "...";
+  }
+
+  // 5. Pad with spaces up to whole codes (2,300 bytes each). Letters that take 2 or more bytes make the byte count
+  // bigger than the character count, so that difference is taken off the number of spaces.
+  var text = JSON.stringify(out);
+  var byteCount = lcBytes(text).length;
+  var wantedLength = Math.max(1, Math.ceil(byteCount / LC_QR_CAP)) * LC_QR_CAP - (byteCount - text.length);
+  while (text.length < wantedLength) text += " ";
+  return text;
+}
+
+// =====================================================================================================================
+// THE QR CODE ENCODER (standard QR code, no library needed)
+//
+// What this does: lcQrMatrix(bytes, part) works out the picture of ONE QR code: a square grid of 177 x 177 tiny
+// squares, each dark or light. It returns the grid as rows: grid[y][x] is true for a dark square.
+//   bytes  the text as UTF-8 bytes, one character per byte (what lcBytes gives).
+//   part   null for a single code, or [index, total, parity] for one of several codes. This is "structured append":
+//          each code says "I am code <index> of <total>", and "parity" is a check number of the whole text (every byte
+//          XORed together), so a scanner that knows structured append can join the codes in the right order. Any other
+//          scanner just reads each code's text on its own, and the texts are joined in order.
+// What kind of code: version 40 (the biggest, 177 x 177), error correction level M (about 15% of it can be damaged
+// and it still reads), byte mode, mask 0. At most 2,329 bytes per code.
+//
+// How it is built, in order (the same steps as the QR standard):
+//   1. Draw the fixed patterns every QR code has (the three big corner squares, the alignment squares, the dotted
+//      lines, and the little strips that say what kind of code it is).
+//   2. Turn the bytes into a long row of bits, and pad it to the size the code has room for.
+//   3. Add error correction ("Reed-Solomon": extra check bytes worked out from the data, so a scanner can fix a
+//      smudged or torn code).
+//   4. Pour the bits into the free squares in a zigzag order.
+//   5. Flip every second square ("mask 0"), which stops large plain areas that scanners find hard to read.
+// The maths below must not be changed, or the codes will not scan.
+// =====================================================================================================================
+function lcQrMatrix(text, part) {
+  var SIZE = 177;                    // squares across (and down) of a version 40 code
+  var DATA_CODEWORDS = 2334;         // bytes of answers a version 40 / level M code holds (a "codeword" is one byte)
+  var BLOCKS = 49;                   // the data is cut into 49 blocks, each with its own error correction
+  var SHORT_BLOCKS = 18;             // the first 18 blocks have 47 data bytes; the other 31 have 48
+  var ECC_PER_BLOCK = 28;            // error correction bytes added to each block
+  var bytes = [];                    // the text as numbers 0 to 255
+  var grid = [];                     // grid[y][x]: is this square dark?
+  var isFixed = [];                  // isFixed[y][x]: is this square part of a fixed pattern (so data must not go there)?
+  var i, j, x, y;
+
+  for (i = 0; i < text.length; i++) bytes.push(text.charCodeAt(i) & 255);
+  // Start with a grid of light squares, none of them fixed.
+  for (y = 0; y < SIZE; y++) {
+    grid.push([]);
+    isFixed.push([]);
+    for (x = 0; x < SIZE; x++) {
+      grid[y].push(false);
+      isFixed[y].push(false);
     }
   }
-  for (y = 0; y < N; y++) for (x = 0; x < N; x++) if (!f[y][x] && (x + y) % 2 == 0) m[y][x] = !m[y][x];
-  return m;
-}
-// THE PAGES THE CODES GO ON. Codes 1 and 2 sit on the form's QR code page (rows "__qr1_0" ... "__qr1_176", "__qr2_..."),
-// each row a read-only text box holding the letter "n" in the ZapfDingbats font (which prints as a black square) for each
-// dark square. Codes 3 to 16 go two to a page on extra pages, which exist only while needed: lcDrawQr copies the hidden page
-// template "qrx" (rows "__qrx_1_0" ... "__qrx_2_176") after the last page with Template.spawn, and deletes the pages it no
-// longer needs (when the viewer refuses to delete one, the page stays, empty and marked "not used", and is left out of
-// printing: lcLastPage). A spawned page's fields are renamed by the viewer (bRename: true) but still end in the template's
-// name, so lcExtra finds them by that ending. Don't write "getField(" for those fields: build_all.py rewrites it
-// to add the form's code in the joined PDF; d["getField"](name) is left alone, and the names found are already complete.
-// lcExtra(doc) returns the spawned pages' field-name prefixes, in page order: [{p: prefix, page: page number}].
-function lcExtra(d) {
-  var out = [], i, nm, m, f, q = d.getField("__qr"), first = q && typeof q.page == "number" ? q.page : -1;
-  for (i = 0; i < d.numFields; i++) {
-    nm = d.getNthFieldName(i); m = /^(.*)__qrx_1_0$/.exec(nm);
-    if (!m || /^([A-Z]+\.)?$/.test(m[1])) continue;     // not a row, or the template's own row ("" or the form's code)
-    f = d["getField"](nm);
-    if (f && typeof f.page == "number" && f.page > first && f.page < d.numPages) out.push({p: m[1], page: f.page});
+
+  // Paint one square of a fixed pattern.
+  function setFixed(x, y, dark) {
+    grid[y][x] = dark;
+    isFixed[y][x] = true;
   }
-  out.sort(function (a, b) { return a.page - b.page; });
-  return out;
+
+  // Multiply two numbers "in GF(256)": the special arithmetic of Reed-Solomon, where every number is one byte and the
+  // answer is one byte again (0x11D is the rule that keeps it inside a byte). Used only for the error correction.
+  function multiply(a, b) {
+    var product = 0;
+    for (var k = 7; k >= 0; k--) {
+      product = (product << 1) ^ ((product >>> 7) * 0x11D);
+      product ^= ((b >>> k) & 1) * a;
+    }
+    return product;
+  }
+
+  // Bit number k of a number, as true / false.
+  function bit(value, k) {
+    return ((value >>> k) & 1) != 0;
+  }
+
+  // ---- 1. The fixed patterns ------------------------------------------------------------------------------------
+
+  // The two dotted "timing" lines (row 6 and column 6): dark, light, dark, light ...
+  for (i = 0; i < SIZE; i++) {
+    setFixed(6, i, i % 2 == 0);
+    setFixed(i, 6, i % 2 == 0);
+  }
+
+  // A "finder": the big square-in-a-square a scanner looks for, centred on (cx, cy), with its light border.
+  // Measured from the middle in squares: distance 0 and 1 dark (the solid middle), 2 light, 3 dark, 4 light (the border).
+  function drawFinder(cx, cy) {
+    for (var dy = -4; dy <= 4; dy++) {
+      for (var dx = -4; dx <= 4; dx++) {
+        var distance = Math.max(Math.abs(dx), Math.abs(dy));
+        var fx = cx + dx;
+        var fy = cy + dy;
+        if (fx >= 0 && fx < SIZE && fy >= 0 && fy < SIZE) setFixed(fx, fy, distance != 2 && distance != 4);
+      }
+    }
+  }
+  drawFinder(3, 3);               // top left
+  drawFinder(SIZE - 4, 3);        // top right
+  drawFinder(3, SIZE - 4);        // bottom left
+
+  // "Alignment" patterns: small squares that help a scanner straighten a big code. Their centres are at every
+  // combination of these positions, except the three that would land on a finder.
+  var ALIGNMENT_AT = [6, 30, 58, 86, 114, 142, 170];
+  var last = ALIGNMENT_AT.length - 1;
+  for (i = 0; i < ALIGNMENT_AT.length; i++) {
+    for (j = 0; j < ALIGNMENT_AT.length; j++) {
+      if ((i == 0 && j == 0) || (i == 0 && j == last) || (i == last && j == 0)) continue;
+      for (var ay = -2; ay <= 2; ay++) {
+        for (var ax = -2; ax <= 2; ax++) {
+          setFixed(ALIGNMENT_AT[i] + ax, ALIGNMENT_AT[j] + ay, Math.max(Math.abs(ax), Math.abs(ay)) != 1);
+        }
+      }
+    }
+  }
+
+  // The "format" strip: 15 bits that say "error correction M, mask 0", written twice (next to two of the finders).
+  // The 5 bits of information are all zero here (M is 00, mask 0 is 000), so the 10 check bits are zero too; the
+  // standard then XORs the 15 bits with 0x5412 so the strip is never all light.
+  var formatCheck = 0;
+  for (i = 0; i < 10; i++) formatCheck = (formatCheck << 1) ^ ((formatCheck >>> 9) * 0x537);
+  var formatBits = ((0 << 10) | formatCheck) ^ 0x5412;
+  for (i = 0; i <= 5; i++) setFixed(8, i, bit(formatBits, i));
+  setFixed(8, 7, bit(formatBits, 6));
+  setFixed(8, 8, bit(formatBits, 7));
+  setFixed(7, 8, bit(formatBits, 8));
+  for (i = 9; i < 15; i++) setFixed(14 - i, 8, bit(formatBits, i));
+  for (i = 0; i < 8; i++) setFixed(SIZE - 1 - i, 8, bit(formatBits, i));
+  for (i = 8; i < 15; i++) setFixed(8, SIZE - 15 + i, bit(formatBits, i));
+  setFixed(8, SIZE - 8, true);   // the one square that is always dark
+
+  // The "version" strip: 18 bits that say "version 40" (12 check bits worked out from the number 40), written twice.
+  var versionCheck = 40;
+  for (i = 0; i < 12; i++) versionCheck = (versionCheck << 1) ^ ((versionCheck >>> 11) * 0x1F25);
+  var versionBits = (40 << 12) | versionCheck;
+  for (i = 0; i < 18; i++) {
+    var vx = SIZE - 11 + i % 3;
+    var vy = Math.floor(i / 3);
+    setFixed(vx, vy, bit(versionBits, i));
+    setFixed(vy, vx, bit(versionBits, i));
+  }
+
+  // ---- 2. The data bits ------------------------------------------------------------------------------------------
+  // In order: (for one of several codes: mode 0011 = "structured append", this code's index, the total - 1, the
+  // parity), then mode 0100 = "bytes follow", the length in 16 bits, the bytes, a terminator of up to 4 zero bits,
+  // then padding to 2,334 bytes.
+  var bits = [];
+  var capacityBits = DATA_CODEWORDS * 8;
+  // Add a number as n bits, biggest bit first.
+  function putBits(value, count) {
+    for (var k = count - 1; k >= 0; k--) bits.push((value >>> k) & 1);
+  }
+  if (part) {
+    putBits(3, 4);
+    putBits(part[0], 4);
+    putBits(part[1] - 1, 4);
+    putBits(part[2], 8);
+  }
+  putBits(4, 4);
+  putBits(bytes.length, 16);
+  for (i = 0; i < bytes.length; i++) putBits(bytes[i], 8);
+  if (bits.length > capacityBits) throw new Error("too much text for one QR code (" + bytes.length + " bytes)");
+  putBits(0, Math.min(4, capacityBits - bits.length));   // terminator
+  while (bits.length % 8) bits.push(0);                   // finish the last byte
+  // Eight bits at a time -> bytes ("data codewords").
+  var data = [];
+  for (i = 0; i < bits.length; i += 8) {
+    var byteValue = 0;
+    for (j = 0; j < 8; j++) byteValue = (byteValue << 1) | bits[i + j];
+    data.push(byteValue);
+  }
+  // Fill what is left with the two padding bytes the standard asks for, 0xEC and 0x11 in turn.
+  for (i = 0; data.length < DATA_CODEWORDS; i++) data.push(i % 2 ? 0x11 : 0xEC);
+
+  // ---- 3. Error correction (Reed-Solomon) ---------------------------------------------------------------------
+  // 49 blocks (18 of 47 data bytes and 31 of 48), each given 28 error correction bytes.
+  // First the "generator": a list of 28 numbers that every block is divided by (worked out once).
+  var generator = [];
+  var root = 1;
+  for (i = 0; i < ECC_PER_BLOCK - 1; i++) generator.push(0);
+  generator.push(1);
+  for (i = 0; i < ECC_PER_BLOCK; i++) {
+    for (j = 0; j < ECC_PER_BLOCK; j++) {
+      generator[j] = multiply(generator[j], root);
+      if (j + 1 < ECC_PER_BLOCK) generator[j] ^= generator[j + 1];
+    }
+    root = multiply(root, 2);
+  }
+  // Then each block: its data bytes followed by its error correction bytes (the remainder of the division).
+  var blocks = [];
+  var position = 0;   // where this block starts in data
+  for (i = 0; i < BLOCKS; i++) {
+    var blockLength = i < SHORT_BLOCKS ? 47 : 48;
+    var blockData = data.slice(position, position + blockLength);
+    var ecc = [];
+    position += blockLength;
+    for (j = 0; j < ECC_PER_BLOCK; j++) ecc.push(0);
+    for (j = 0; j < blockData.length; j++) {
+      var factor = blockData[j] ^ ecc.shift();
+      ecc.push(0);
+      for (var eccIndex = 0; eccIndex < ECC_PER_BLOCK; eccIndex++) ecc[eccIndex] ^= multiply(generator[eccIndex], factor);
+    }
+    // A short block gets a -1 "no byte here" marker so that all blocks are equally long when interleaved below.
+    if (i < SHORT_BLOCKS) blockData.push(-1);
+    blocks.push(blockData.concat(ecc));
+  }
+  // Interleave: first byte of block 1, first byte of block 2 ... then the second byte of each block, and so on
+  // (skipping the "no byte here" markers). This spreads a smudge over many blocks, so each can still be repaired.
+  var codewords = [];
+  for (i = 0; i < blocks[0].length; i++) {
+    for (j = 0; j < BLOCKS; j++) {
+      if (blocks[j][i] != -1) codewords.push(blocks[j][i]);
+    }
+  }
+
+  // ---- 4. Place the bits, and 5. mask 0 -----------------------------------------------------------------------
+  // The standard fills the grid two columns at a time, from the bottom right, going up and then down in turn (a
+  // zigzag), and skips squares that belong to a fixed pattern. Column 6 is skipped (the timing line).
+  var bitNumber = 0;
+  for (var rightColumn = SIZE - 1; rightColumn >= 1; rightColumn -= 2) {
+    if (rightColumn == 6) rightColumn = 5;
+    for (var step = 0; step < SIZE; step++) {
+      for (j = 0; j < 2; j++) {
+        x = rightColumn - j;
+        var goingUp = ((rightColumn + 1) & 2) == 0;
+        y = goingUp ? SIZE - 1 - step : step;
+        if (!isFixed[y][x] && bitNumber < codewords.length * 8) {
+          grid[y][x] = ((codewords[bitNumber >>> 3] >>> (7 - (bitNumber & 7))) & 1) != 0;
+          bitNumber++;
+        }
+      }
+    }
+  }
+  // Mask 0: flip every square where x + y is even (only squares that are not fixed patterns).
+  for (y = 0; y < SIZE; y++) {
+    for (x = 0; x < SIZE; x++) {
+      if (!isFixed[y][x] && (x + y) % 2 == 0) grid[y][x] = !grid[y][x];
+    }
+  }
+  return grid;
 }
-// Code j (0 = first) as a function: x -> the field "<row>" or "label" or "frame" of its slot.
-function lcSlot(d, pg, j) {
-  var t = j < 2 ? "__qr" + (j + 1) : "__qrx_" + ((j - 2) % 2 + 1), p = j < 2 ? null : pg[(j - 2) >> 1] && pg[(j - 2) >> 1].p;
-  return function (x) { return p === null ? d.getField(t + "_" + x) : p === undefined ? null : d["getField"](p + t + "_" + x); };
+
+// =====================================================================================================================
+// THE PAGES THE CODES GO ON
+//
+// A code is drawn with text boxes, one box per row of the code. Each row box is read-only and holds the letter "n" in
+// the ZapfDingbats font (which prints as a black square) for each dark square, and a space for each light square.
+//   Codes 1 and 2 sit on the form's QR code page: rows "__qr1_0" ... "__qr1_176" and "__qr2_0" ... "__qr2_176".
+//   Codes 3 to 16 go two to a page on extra pages, which exist only while they are needed. lcDrawQr copies the hidden
+//   page template "qrx" (its rows are "__qrx_1_0" ... "__qrx_2_176") after the last page, with Template.spawn, and
+//   deletes the extra pages it no longer needs. If the viewer refuses to delete a page, the page stays, empty and
+//   marked "not used", and is left out of printing (see lcLastPage).
+// The viewer renames a copied page's boxes (bRename: true), but each name still ends with the template's name, so
+// lcExtra finds them by that ending.
+// Do not write the call to get a field with the usual dot-and-name spelling for those boxes: build_all.py rewrites the
+// usual spelling, to add the form's code in the joined PDF. The square-bracket spelling d["getField"](name) is left alone,
+// and the names found are already complete.
+// =====================================================================================================================
+
+// lcExtra(d): finds the extra QR pages that exist now.
+// Returns a list in page order: [{p: the start of that page's box names, page: its page number}].
+function lcExtra(d) {
+  var pages = [];
+  var i, fieldName, nameParts, field;
+  var qrBox = d.getField("__qr");
+  var qrPage = qrBox && typeof qrBox.page == "number" ? qrBox.page : -1;   // the extras come after this page
+  for (i = 0; i < d.numFields; i++) {
+    fieldName = d.getNthFieldName(i);
+    nameParts = /^(.*)__qrx_1_0$/.exec(fieldName);
+    // Not the first row of a QR page, or the template's own row (its start is "" or just the form's code): skip.
+    if (!nameParts || /^([A-Z]+\.)?$/.test(nameParts[1])) continue;
+    field = d["getField"](fieldName);
+    if (field && typeof field.page == "number" && field.page > qrPage && field.page < d.numPages) {
+      pages.push({p: nameParts[1], page: field.page});
+    }
+  }
+  pages.sort(function (first, second) { return first.page - second.page; });
+  return pages;
 }
-// Extra pages that n codes need.
-function lcPagesFor(n) { return n > 2 ? Math.ceil((n - 2) / 2) : 0; }
-// The last page of the form as printed: the QR code page, plus the extra pages the codes of this text use.
-function lcLastPage(d, text) { return d.getField("__qr").page + lcPagesFor(lcCodes(text)); }
-// "" when the codes on the pages are exactly those of this text (every code in use has its first row drawn, every other
-// slot is empty); otherwise what is wrong. Used before printing.
+
+// lcSlot(d, extraPages, j): the place for code number j (0 = the first code).
+// Returns a function: what -> that slot's box, where what is a row number 0-176, or "label", or "frame".
+// Example: for code 1 (j = 0), lcSlot(d, pages, 0)("label") is the box "__qr1_label".
+function lcSlot(d, extraPages, j) {
+  var prefix = null;       // null = a code on the form's own QR page; otherwise the start of an extra page's box names
+  var rowName;             // the part of the box name that says which code of the page this is
+  if (j < 2) {
+    rowName = "__qr" + (j + 1);
+  } else {
+    rowName = "__qrx_" + ((j - 2) % 2 + 1);                       // two codes to an extra page: 1st and 2nd
+    var page = extraPages[(j - 2) >> 1];                          // which extra page (undefined if it does not exist)
+    prefix = page && page.p;
+  }
+  return function (what) {
+    if (prefix === null) return d.getField(rowName + "_" + what);
+    if (prefix === undefined) return null;
+    return d["getField"](prefix + rowName + "_" + what);
+  };
+}
+
+// How many extra pages n codes need. Example: 2 codes -> 0 extra pages; 3 or 4 codes -> 1; 5 or 6 -> 2.
+function lcPagesFor(codeCount) {
+  return codeCount > 2 ? Math.ceil((codeCount - 2) / 2) : 0;
+}
+
+// The last page of the form as printed: the QR code page, plus the extra pages that the codes of this text use.
+function lcLastPage(d, text) {
+  return d.getField("__qr").page + lcPagesFor(lcCodes(text));
+}
+
+// lcQrCheck(d, text): are the codes on the pages exactly the codes this text needs?
+// Used before printing. Returns "" when all is well (every code in use has its first row drawn, and every other
+// slot is empty); otherwise a sentence that says what is wrong, e.g. "QR code 2 is blank".
 function lcQrCheck(d, text) {
-  var n = lcCodes(text), pg = lcExtra(d), j, f;
-  if (pg.length < lcPagesFor(n)) return "the extra QR code pages are missing";
-  for (j = 0; j < 2 + 2 * pg.length || j < n; j++) {
-    f = lcSlot(d, pg, j)("0");
-    if (!f) return "QR code " + (j + 1) + " is missing";
-    if ((f.value !== "") != (j < n)) return j < n ? "QR code " + (j + 1) + " is blank" : "QR code " + (j + 1) + " is left over";
+  var needed = lcCodes(text);
+  var extraPages = lcExtra(d);
+  var j, firstRow;
+  if (extraPages.length < lcPagesFor(needed)) return "the extra QR code pages are missing";
+  for (j = 0; j < 2 + 2 * extraPages.length || j < needed; j++) {
+    firstRow = lcSlot(d, extraPages, j)("0");
+    if (!firstRow) return "QR code " + (j + 1) + " is missing";
+    if ((firstRow.value !== "") != (j < needed)) {
+      if (j < needed) return "QR code " + (j + 1) + " is blank";
+      return "QR code " + (j + 1) + " is left over";
+    }
   }
   return "";
 }
-// lcDrawQr(doc, text) draws text as one QR code, or as many as it needs (at most 16, one per 2,300 bytes), and returns how
-// many (0 for ""; lcDrawQr(doc, "") clears everything and removes the extra pages). The text is cut into consecutive
-// equal slices; each code carries the structured-append header (its index, the total, the parity of the whole text), so a
-// scanner that supports it joins them, and any other scanner reads each slice and the slices are joined in order. The
-// frames, and the labels "QR code 1 of 3 (scan all 3 codes)", show only for codes in use.
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcDrawQr(d, text): draws the text as one QR code, or as many as it needs (at most 16, one per 2,300 bytes).
+//   d     the PDF document.
+//   text  what the codes should carry. "" clears every code and removes the extra pages.
+// Returns how many codes it drew (0 for "").
+// How: the text is cut into slices of equal size, one per code. Each code carries the structured-append header (its
+// number, the total, the parity of the whole text), so a scanner that supports it joins them; any other scanner reads
+// each slice and the slices are joined in order. Frames, and labels such as "QR code 1 of 3 (scan all 3 codes)",
+// show only for codes in use.
+// ---------------------------------------------------------------------------------------------------------------------
 function lcDrawQr(d, text) {
-  var s = lcBytes(text), n = lcCodes(text), size = n ? Math.ceil(s.length / n) : 0, codes = [], parity = 0, i, k, j, y, x, row, pg, f, g, put, calc = d.calculate, more;
-  if (n > LC_QR_MAX) throw new Error("the answers are too long for " + LC_QR_MAX + " QR codes (" + s.length + " bytes, at most " + LC_QR_MAX * LC_QR_CAP + ")");
-  for (i = 0; i < s.length; i++) parity ^= s.charCodeAt(i) & 255;
-  for (k = 0; k < n; k++) codes.push(lcQrMatrix(s.slice(k * size, (k + 1) * size), n > 1 ? [k, n, parity] : null));   // all made before anything is touched
-  d.calculate = false; // thousands of rows: don't re-run the checks after each one
+  var byteString = lcBytes(text);
+  var count = lcCodes(text);
+  var sliceSize = count ? Math.ceil(byteString.length / count) : 0;
+  var codes = [];          // one grid for each code
+  var parity = 0;          // all the bytes XORed together
+  var i, k, j, y, x, row, pages, newPages, slotBox, box;
+  var calculateWas = d.calculate;
+  var extraNeeded;         // how many extra pages these codes need
+  if (count > LC_QR_MAX) throw new Error("the answers are too long for " + LC_QR_MAX + " QR codes (" + byteString.length + " bytes, at most " + LC_QR_MAX * LC_QR_CAP + ")");
+  for (i = 0; i < byteString.length; i++) parity ^= byteString.charCodeAt(i) & 255;
+  // Work out every code first, before anything on the form is touched: if the maths fails, the form is left as it was.
+  for (k = 0; k < count; k++) {
+    codes.push(lcQrMatrix(byteString.slice(k * sliceSize, (k + 1) * sliceSize), count > 1 ? [k, count, parity] : null));
+  }
+
+  // The label under a code. A code in use says which one it is; a slot not in use is blank, except the first slot of an
+  // extra page that is left over, which says so.
+  function labelFor(j) {
+    if (!codes[j]) {
+      if (j % 2 == 0 && j >= 2 + 2 * extraNeeded) return "(this page is not used)";
+      return "";
+    }
+    if (count < 2) return "";
+    var label = "QR code " + (j + 1) + " of " + count;
+    if (j == 0) label += count == 2 ? " (scan both codes)" : " (scan all " + count + " codes)";
+    return label;
+  }
+
+  d.calculate = false;   // thousands of rows are written: do not re-run the checks after each one
   try {
-    pg = lcExtra(d);
-    for (more = lcPagesFor(n); pg.length < more; ) {                // add the pages that are needed
+    pages = lcExtra(d);
+    extraNeeded = lcPagesFor(count);
+    // Add the extra pages that are needed.
+    while (pages.length < extraNeeded) {
       d.getTemplate("qrx").spawn({nPage: d.numPages, bRename: true, bOverlay: false});
-      g = lcExtra(d); if (g.length <= pg.length) throw new Error("the viewer did not add the page for QR code " + (2 * pg.length + 3));
-      pg = g;
+      newPages = lcExtra(d);
+      if (newPages.length <= pages.length) throw new Error("the viewer did not add the page for QR code " + (2 * pages.length + 3));
+      pages = newPages;
     }
-    while (pg.length > more) {                                      // take away the pages that are not
-      try { d.deletePages(pg[pg.length - 1].page); } catch (e) { break; }
-      g = lcExtra(d); if (g.length >= pg.length) break;
-      pg = g;
+    // Take away the extra pages that are not needed (if the viewer refuses, they stay, marked "not used").
+    while (pages.length > extraNeeded) {
+      try {
+        d.deletePages(pages[pages.length - 1].page);
+      } catch (e) {
+        break;
+      }
+      newPages = lcExtra(d);
+      if (newPages.length >= pages.length) break;
+      pages = newPages;
     }
-    for (j = 0; j < 2 + 2 * pg.length; j++) {                       // every slot: its code, or empty
-      put = lcSlot(d, pg, j);
-      for (y = 0; y < 177; y++) { row = ""; if (codes[j]) for (x = 0; x < 177; x++) row += codes[j][y][x] ? "n" : " ";
-        put(y).value = row; }
-      if (f = put("label")) f.value = !codes[j] ? (j % 2 == 0 && j >= 2 + 2 * more ? "(this page is not used)" : "") : n < 2 ? "" : "QR code " + (j + 1) + " of " + n + (j == 0 ? (n == 2 ? " (scan both codes)" : " (scan all " + n + " codes)") : "");
-      if (f = put("frame")) f.display = codes[j] ? display.visible : display.hidden;
+    // Every slot gets its code, or is emptied.
+    for (j = 0; j < 2 + 2 * pages.length; j++) {
+      slotBox = lcSlot(d, pages, j);
+      for (y = 0; y < 177; y++) {
+        row = "";
+        // "n" (a black square in ZapfDingbats) for a dark square, a space for a light one.
+        if (codes[j]) {
+          for (x = 0; x < 177; x++) row += codes[j][y][x] ? "n" : " ";
+        }
+        slotBox(y).value = row;
+      }
+      box = slotBox("label");
+      if (box) box.value = labelFor(j);
+      box = slotBox("frame");
+      if (box) box.display = codes[j] ? display.visible : display.hidden;
     }
-  } finally { d.calculate = calc; }
-  return n;
+  } finally {
+    d.calculate = calculateWas;
+  }
+  return count;
 }
 """[1:-1]
 
-# THE PIPE-FORMAT TEXT (only for a form file with FORM["qrFormat"] == "pipe", e.g. forms/lc_pipe_form.py). pdf_writer.py
-# appends this block to the document script of such a form and fills in __PIPE__ (the position table from the form file)
-# and __GROUPS__. Other forms do not get it, so their PDFs are unchanged. It replaces lcPayload for that form: the
-# "Generate QR Code" button (BUTTON_JS "generate-qr-pipe") puts lcPipeText(doc) into the ordinary QR code path (lcDrawQr, up to 16 codes)
-# instead of the JSON text. lcPipeText is the 4 records of the old smart form's barcode, one after the other, with a newline
-# between records. Nothing here touches the QR encoder or its drawing.
+# THE PIPE-FORMAT TEXT (only for a form file with FORM["qrFormat"] == "pipe", e.g. forms/lc_pipe_form.py).
+# pdf_writer.py adds this block to the end of the document script of such a form, and fills in __PIPE__ (the position
+# table from the form file) and __GROUPS__ (the "tick any" questions' options). Other forms do not get it, so their PDFs
+# are unchanged. It takes the place of lcPayload for that form: the "Generate QR Code" button (BUTTON_JS
+# "generate-qr-pipe") puts lcPipeText(doc) into the ordinary QR code path (lcDrawQr, up to 16 codes) instead of the JSON
+# text. lcPipeText is the 4 records of the old smart form's barcode, one after the other, with a new line between records.
+# Nothing here touches the QR encoder or its drawing.
 PIPE_JS = r"""
+// =====================================================================================================================
 // THE PIPE-DELIMITED RECORDS (the old smart form's barcode text), built from the form file's position table.
-// lcPipe = [record 1 entries, record 2 entries, ...]. Each entry describes one position (the old "1_01" ... "4_03"):
-//   {"c": text}                         a fixed text
-//   {"id": q}                           the answer as typed; also "max": cut to this many characters, "as": "amount" or "date",
-//                                       "codes": {answer: code} (an answer not listed gives nothing)
-//   {"lines": [q, ...]}                 each non-blank answer in [ ]
-//   {"join": [q, ...]}                  the non-blank answers, one space between
-//   {"tpl": {"when": tick box, "parts": [...]}}   a sentence: text with {q} answers, ["map", q, {answer: text}],
-//                                       ["list", q, separator, [[option, text], ...]], ["if", q, text if answered, else text]
+//
+// What this does: instead of the JSON text, the QR codes of this form carry 4 "records". A record is one long line of
+// positions, and every position ends with the "|" sign (a "pipe"), like this:
+//   LC01|2026-03-05|USD|1250.50|...|
+// What goes in each position is decided by the form file (FORM["pipe"]), which is pasted in below as lcPipe.
+//
+// lcPipe = [record 1's entries, record 2's entries, ...]. Each entry describes one position (the old "1_01" ... "4_03").
+// An entry can be any ONE of these:
+//   {"c": text}                         a fixed text, the same every time
+//   {"id": q}                           the answer to question q, as typed. It can also have:
+//                                         "max": cut the answer to this many characters
+//                                         "as": "amount" (1250 -> 1250.00) or "date" (05/03/2026 -> 2026-03-05)
+//                                         "codes": {answer: code}  (an answer that is not listed gives nothing)
+//   {"lines": [q, ...]}                 each answer that is not blank, inside [ ]       e.g. [Line one][Line two]
+//   {"join": [q, ...]}                  the answers that are not blank, with one space between
+//   {"tpl": {"when": tick box, "parts": [...]}}   a sentence. Its parts are text with {q} marks (each is replaced by
+//                                       the answer to q), or ["map", q, {answer: text}], or
+//                                       ["list", q, separator, [[option, text], ...]], or ["if", q, text if answered, else text]
 //   {"qty": {"on", "o", "c", "head", "tail"}}      "head IN n ORIGINALS AND m COPIES<tail>."
-// Any entry may also have "if": [q, [answers]] (blank unless the answer is one of these), "d" (used when the result is
-// blank), "chop": true (wrap in lines, see lcPipeChop). Every position ends with "|".
+// Any entry may also have:
+//   "if": [q, [answers]]    the position is blank unless the answer to q is one of these
+//   "d"                     a text to use when the result is blank
+//   "chop": true            wrap the result into lines (see lcPipeChop)
+// =====================================================================================================================
 var lcPipe = __PIPE__;
-// The answers by question id: text as typed (not trimmed), a tick box "true" (absent when not ticked), "tick any" a list.
-// The records' own characters | [ ] { } and line breaks must never come from an answer (the keystroke filter refuses them, but a
-// value set by FDF import, autofill or a pasted newline skips it): they become a space. Only the paragraph boxes (the entries
-// with "chop" on one answer) keep Enter, which the records write as {}: any line break there is one Enter (CR).
+
+// The ids of the paragraph questions (the entries with "chop"): the only ones whose Enter key is kept. Worked out the
+// first time it is needed (null until then).
 var lcPipeLong = null;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcPipeAnswers(d): every answer, by question id.
+//   d  the PDF document.
+// Returns {question id: answer}: text as typed (not trimmed); a ticked tick box is "true" (not there when not ticked);
+// a "tick any" question is the list of ticked options.
+//
+// The records' own signs | [ ] { } and line breaks must never come from an answer. The keystroke filter refuses to type
+// them, but a value put in by other means (an import, autofill, a pasted new line) skips that filter. So each one is
+// turned into a space. Only the paragraph questions keep Enter: the records write it as {}, and any kind of line
+// break there counts as one Enter (a carriage return, "\r").
+// ---------------------------------------------------------------------------------------------------------------------
 function lcPipeAnswers(d) {
-var G = {__GROUPS__}, A = {}, i, j, n, f, g, v, e;
-if (!lcPipeLong) {
-  lcPipeLong = {};
-  for (i = 0; i < lcPipe.length; i++) for (j = 0; j < lcPipe[i].length; j++) {
-    e = lcPipe[i][j]; if (!e.chop) continue;
-    if (e.id) lcPipeLong[e.id] = 1;
-    for (g = 0; e.join && g < e.join.length; g++) lcPipeLong[e.join[g]] = 1;
-  }
-}
-for (i = 0; i < d.numFields; i++) {
-  n = d.getNthFieldName(i); if (/^__/.test(n) || /__list$/.test(n)) continue;
-  f = d.getField(n); if (!f || f.type == "button" || f.type == "signature") continue;
-  g = /^(.+)__(\d+)$/.exec(n);
-  if (g && G[g[1]]) { if (f.value != "Off") { if (!A[g[1]]) A[g[1]] = []; A[g[1]].push(G[g[1]][+g[2]]); } continue; }
-  if (f.type == "checkbox") { if (f.value != "Off") A[n] = "true"; continue; }
-  v = f.type == "radiobutton" ? (f.value == "Off" ? "" : String(f.value)) : String(f.valueAsString);
-  v = lcPipeLong[n] ? v.replace(/\r\n|\n/g, "\r").replace(/[|\[\]{}]/g, " ") : v.replace(/[|\[\]{}\r\n]/g, " ");
-  if (v !== "") A[n] = v;
-}
-return A;
-}
-// Long text in lines, as the old form wrote it: leading and trailing blanks and Enter dropped; up to 65 characters as is
-// (Enter becomes {}); longer: cut at spaces into lines padded with spaces to 65 characters, each followed by {} (a word longer
-// than 65 is cut at 65; with Enter, each paragraph is cut on its own). Returns "" for nothing.
-function lcPipeChop(s) {
-var MAX = 65;
-function trim(x) { return x.replace(/^\s+/, "").replace(/\s+$/, ""); }
-function lr(x) { return x.replace(/^\r+/, "").replace(/\r+$/, ""); }
-function cut(x) { var r = ""; while (x.length > 0) { if (x.length > MAX) { r += x.slice(0, MAX) + "{}"; x = x.slice(MAX); } else { r += x; x = ""; } } return r; }
-function words(x) {   // no Enter inside: fill lines word by word
-  var w = x.split(" "), fin = [], res = "", i, r = "";
-  for (i = 0; i < w.length; i++) if (w[i].length > MAX) w[i] = cut(w[i]);
-  for (i = 0; i < w.length; i++) {
-    if ((res + w[i]).length > MAX) {
-      if (w[i].length <= MAX) { i--; while (res.length < MAX) res += " "; fin.push(res + "{}"); res = ""; }
-      else { if (res !== "") { while (res.length < MAX) res += " "; res += "{}"; } fin.push(res + w[i] + " "); res = ""; }
-    } else res += w[i] + " ";
-  }
-  if (res !== "") fin.push(res);
-  for (i = 0; i < fin.length; i++) r += (i == fin.length - 1 && fin[i].slice(-1) == " ") ? fin[i].slice(0, fin[i].length - 1) : fin[i];
-  return r;
-}
-function paragraphs(x, byWords) {   // Enter inside: each paragraph on its own (byWords: the text has spaces; no trimming then)
-  var a = x.split("\r"), r = "", i;
-  for (i = 0; i < a.length; i++) {
-    if (byWords) { if (a[i].length > MAX) a[i] = words(a[i]); }
-    else a[i] = cut(trim(a[i]));
-    r += a[i] + (i < a.length - 1 ? "{}" : "");
-  }
-  return r;
-}
-if (s == null || s.length <= 0) return "";
-s = trim(lr(s)); if (s.length <= 0) return "";
-if (s.length <= MAX) return trim(s.replace(/\r/g, "{}"));
-if (s.indexOf(" ") <= 0) return s.indexOf("\r") <= 0 ? cut(s) : paragraphs(s, false);
-return s.indexOf("\r") <= 0 ? words(s) : paragraphs(s, true);
-}
-// One position's text.
-function lcPipeValue(e, A) {
-function a(id) { var x = A[id]; return typeof x == "string" ? x : ""; }
-function has(list, x) { for (var i = 0; i < list.length; i++) if (list[i] == x) return true; return false; }
-function fill(t) { return t.replace(/\{(\w+)\}/g, function (m, id) { return a(id); }); }
-var v = "", i, x, p, o, c, ph, tail, out, picks, q, m;
-if (!e["if"] || has(e["if"][1], a(e["if"][0]))) {
-  if (e.c != null) v = e.c;
-  else if (e.lines) { for (i = 0; i < e.lines.length; i++) if (a(e.lines[i]) !== "") v += "[" + a(e.lines[i]) + "]"; }
-  else if (e.join) { x = []; for (i = 0; i < e.join.length; i++) if (a(e.join[i]) !== "") x.push(a(e.join[i])); v = x.join(" "); }
-  else if (e.tpl) {
-    q = e.tpl; out = ""; if (a(q.when) == "true") for (i = 0; i < q.parts.length; i++) {
-      p = q.parts[i];
-      if (typeof p == "string") out += fill(p);
-      else if (p[0] == "map") out += fill(p[2].hasOwnProperty(a(p[1])) ? p[2][a(p[1])] : "");
-      else if (p[0] == "if") out += fill(a(p[1]) !== "" ? p[2] : p[3]);
-      else if (p[0] == "list") {   // ticked options in the table's order; none ticked: no sentence at all
-        picks = []; x = A[p[1]] || [];
-        for (m = 0; m < p[3].length; m++) if (has(x, p[3][m][0])) picks.push(p[3][m][1]);
-        if (!picks.length) { out = ""; break; }
-        out += picks.join(p[2]);
+  var GROUPS = {__GROUPS__};   // "tick any" questions: question id -> its list of options
+  var answers = {};
+  var i, j, n, field, partOfGroup, text, entry, k;
+
+  // First time only: which questions are paragraph questions?
+  if (!lcPipeLong) {
+    lcPipeLong = {};
+    for (i = 0; i < lcPipe.length; i++) {
+      for (j = 0; j < lcPipe[i].length; j++) {
+        entry = lcPipe[i][j];
+        if (!entry.chop) continue;
+        if (entry.id) lcPipeLong[entry.id] = 1;
+        for (k = 0; entry.join && k < entry.join.length; k++) lcPipeLong[entry.join[k]] = 1;
       }
     }
-    v = out;
   }
-  else if (e.qty) {
-    q = e.qty; o = a(q.o); c = a(q.c);
-    if (a(q.on) == "true" && (o !== "" || c !== "")) {
-      tail = q.tail && a(q.tail[0]) !== "" ? fill(q.tail[1]) : "";
-      if (o == "0" && c == "0") ph = "";
-      else if (o === "" || o == "0") ph = " IN " + c + " " + (c == "1" ? "COPY" : "COPIES");
-      else if (c === "" || c == "0") ph = " IN " + o + " " + (o == "1" ? "ORIGINAL" : "ORIGINALS");
-      else ph = " IN " + o + " " + (o == "1" ? "ORIGINAL" : "ORIGINALS") + " AND " + c + " " + (c == "1" ? "COPY" : "COPIES");
-      if (ph !== "" || tail !== "") v = q.head + ph + tail + ".";
+
+  // The box's name is kept in the variable n and the line below is written in exactly this way on purpose: build_all.py
+  // finds that line and adds a filter to it, so that one form of the joined PDF does not read another form's boxes.
+  for (i = 0; i < d.numFields; i++) {
+    n = d.getNthFieldName(i);
+    if (/^__/.test(n) || /__list$/.test(n)) continue;   // the form's own helper boxes and the date drop-down lists
+    field = d.getField(n);
+    if (!field || field.type == "button" || field.type == "signature") continue;
+
+    // One option of a "tick any" question is named "<question>__<number>".
+    partOfGroup = /^(.+)__(\d+)$/.exec(n);
+    if (partOfGroup && GROUPS[partOfGroup[1]]) {
+      if (field.value != "Off") {
+        if (!answers[partOfGroup[1]]) answers[partOfGroup[1]] = [];
+        answers[partOfGroup[1]].push(GROUPS[partOfGroup[1]][+partOfGroup[2]]);
+      }
+      continue;
     }
+    if (field.type == "checkbox") {
+      if (field.value != "Off") answers[n] = "true";
+      continue;
+    }
+    if (field.type == "radiobutton") {
+      text = field.value == "Off" ? "" : String(field.value);
+    } else {
+      text = String(field.valueAsString);
+    }
+    if (lcPipeLong[n]) {
+      // A paragraph: every kind of line break becomes one carriage return (Enter); the other special signs become spaces.
+      text = text.replace(/\r\n|\n/g, "\r").replace(/[|\[\]{}]/g, " ");
+    } else {
+      // An ordinary answer: the special signs and all line breaks become spaces.
+      text = text.replace(/[|\[\]{}\r\n]/g, " ");
+    }
+    if (text !== "") answers[n] = text;
   }
-  else if (e.id) {
-    v = a(e.id);
-    if (e.max != null) v = v.slice(0, e.max);
-    if (e.as == "amount") { v = v.replace(/,/g, ""); if (/^\d+$/.test(v)) v += ".00"; else if (/^\d+\.\d$/.test(v)) v += "0"; }
-    if (e.as == "date") { x = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(v); v = x ? x[3] + "-" + x[2] + "-" + x[1] : ""; }
-    if (e.codes) v = e.codes.hasOwnProperty(v) ? e.codes[v] : "";
+  return answers;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcPipeChop(text): long text in lines, as the old form wrote it.
+//   Leading and trailing blanks and Enters are dropped.
+//   Up to 65 characters: kept as one line (an Enter inside becomes {}).
+//   Longer: cut at spaces into lines. Each line is padded with spaces to 65 characters and followed by {}.
+//   A single word longer than 65 characters is cut at 65. With Enters inside, each paragraph is cut on its own.
+// Returns "" for nothing.
+// Example (with a line length of 10 instead of 65): "aaa bbb ccc ddd" -> "aaa bbb   {}ccc ddd"
+// ---------------------------------------------------------------------------------------------------------------------
+function lcPipeChop(text) {
+  var MAX = 65;   // characters in a line
+
+  // Without blanks at the start and the end.
+  function trim(text) {
+    return text.replace(/^\s+/, "").replace(/\s+$/, "");
   }
-  if (e.chop) v = lcPipeChop(v);
+  // Without Enters (carriage returns) at the start and the end.
+  function trimEnters(text) {
+    return text.replace(/^\r+/, "").replace(/\r+$/, "");
+  }
+  // Adds spaces to the end until the line is MAX characters long.
+  function padLine(line) {
+    while (line.length < MAX) line += " ";
+    return line;
+  }
+  // Text without spaces, cut into lines of MAX characters, each followed by {} (the last piece has none).
+  function cutIntoLines(piece) {
+    var result = "";
+    while (piece.length > 0) {
+      if (piece.length > MAX) {
+        result += piece.slice(0, MAX) + "{}";
+        piece = piece.slice(MAX);
+      } else {
+        result += piece;
+        piece = "";
+      }
+    }
+    return result;
+  }
+  // Text with spaces but no Enter inside: fills the lines word by word.
+  function fillByWords(paragraph) {
+    var words = paragraph.split(" ");
+    var lines = [];        // the finished lines
+    var line = "";         // the line being filled (each word is followed by a space)
+    var result = "";
+    var i;
+    for (i = 0; i < words.length; i++) {
+      if (words[i].length > MAX) words[i] = cutIntoLines(words[i]);   // a word too long for a line is cut first
+    }
+    for (i = 0; i < words.length; i++) {
+      if ((line + words[i]).length > MAX) {
+        // The word does not fit on this line.
+        if (words[i].length <= MAX) {
+          // Finish this line and try the same word again on a fresh one.
+          i--;
+          lines.push(padLine(line) + "{}");
+          line = "";
+        } else {
+          // A cut-up long word: finish this line if it has something, then the word has its own line(s).
+          if (line !== "") line = padLine(line) + "{}";
+          lines.push(line + words[i] + " ");
+          line = "";
+        }
+      } else {
+        line += words[i] + " ";
+      }
+    }
+    if (line !== "") lines.push(line);
+    // Join the lines; the very last space (after the last word) is not wanted.
+    for (i = 0; i < lines.length; i++) {
+      if (i == lines.length - 1 && lines[i].slice(-1) == " ") result += lines[i].slice(0, lines[i].length - 1);
+      else result += lines[i];
+    }
+    return result;
+  }
+  // Text with Enters inside: each paragraph on its own, with {} between paragraphs.
+  // hasSpaces: the text has spaces, so fill by words (and do not trim); otherwise trim each paragraph and cut it.
+  function paragraphs(whole, hasSpaces) {
+    var parts = whole.split("\r");
+    var result = "";
+    var i;
+    for (i = 0; i < parts.length; i++) {
+      if (hasSpaces) {
+        if (parts[i].length > MAX) parts[i] = fillByWords(parts[i]);
+      } else {
+        parts[i] = cutIntoLines(trim(parts[i]));
+      }
+      result += parts[i] + (i < parts.length - 1 ? "{}" : "");
+    }
+    return result;
+  }
+
+  if (text == null || text.length <= 0) return "";
+  text = trim(trimEnters(text));
+  if (text.length <= 0) return "";
+  // Short enough for one line: as it is (each Enter inside becomes {}).
+  if (text.length <= MAX) return trim(text.replace(/\r/g, "{}"));
+  var hasSpace = text.indexOf(" ") > 0;
+  var hasEnter = text.indexOf("\r") > 0;
+  if (!hasSpace) return hasEnter ? paragraphs(text, false) : cutIntoLines(text);
+  return hasEnter ? paragraphs(text, true) : fillByWords(text);
 }
-if (v === "" && e.d != null) v = e.d;
-return v;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcPipeValue(entry, answers): the text of ONE position (see the list of entry kinds at the top).
+//   entry    one entry of lcPipe.
+//   answers  the answers by question id (from lcPipeAnswers).
+// Returns the text, without the "|" that follows it.
+// ---------------------------------------------------------------------------------------------------------------------
+function lcPipeValue(entry, answers) {
+  var value = "";
+
+  // The answer to question id as text ("" if there is none, or if it is a list).
+  function answerOf(id) {
+    var answer = answers[id];
+    return typeof answer == "string" ? answer : "";
+  }
+  // Is item one of the items of list?
+  function has(list, item) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] == item) return true;
+    }
+    return false;
+  }
+  // Replaces every {question id} in the text by that question's answer.
+  function fill(template) {
+    return template.replace(/\{(\w+)\}/g, function (mark, id) { return answerOf(id); });
+  }
+
+  // {"lines": [q, ...]}: each answer that is not blank, inside [ ].
+  function linesValue() {
+    var result = "";
+    for (var i = 0; i < entry.lines.length; i++) {
+      if (answerOf(entry.lines[i]) !== "") result += "[" + answerOf(entry.lines[i]) + "]";
+    }
+    return result;
+  }
+
+  // {"join": [q, ...]}: the answers that are not blank, one space between.
+  function joinValue() {
+    var filled = [];
+    for (var i = 0; i < entry.join.length; i++) {
+      if (answerOf(entry.join[i]) !== "") filled.push(answerOf(entry.join[i]));
+    }
+    return filled.join(" ");
+  }
+
+  // {"tpl": ...}: a sentence made of parts. It is blank unless its tick box ("when") is ticked.
+  function templateValue() {
+    var template = entry.tpl;
+    var result = "";
+    var part, picks, ticked, m;
+    if (answerOf(template.when) != "true") return "";
+    for (var i = 0; i < template.parts.length; i++) {
+      part = template.parts[i];
+      if (typeof part == "string") {
+        result += fill(part);                                    // plain text, with {question} marks
+      } else if (part[0] == "map") {
+        // ["map", q, {answer: text}]: the text that goes with the answer to q (nothing if the answer is not listed)
+        result += fill(part[2].hasOwnProperty(answerOf(part[1])) ? part[2][answerOf(part[1])] : "");
+      } else if (part[0] == "if") {
+        // ["if", q, text if answered, text if not]
+        result += fill(answerOf(part[1]) !== "" ? part[2] : part[3]);
+      } else if (part[0] == "list") {
+        // ["list", q, separator, [[option, text], ...]]: the texts of the ticked options, in the table's order.
+        // No option ticked: no sentence at all.
+        picks = [];
+        ticked = answers[part[1]] || [];
+        for (m = 0; m < part[3].length; m++) {
+          if (has(ticked, part[3][m][0])) picks.push(part[3][m][1]);
+        }
+        if (!picks.length) return "";
+        result += picks.join(part[2]);
+      }
+    }
+    return result;
+  }
+
+  // {"qty": ...}: "<head> IN 2 ORIGINALS AND 1 COPY<tail>." from the number of originals (o) and copies (c).
+  // Example: 2 originals, 1 copy -> " IN 2 ORIGINALS AND 1 COPY"; 1 original, no copies -> " IN 1 ORIGINAL".
+  function quantityValue() {
+    var qty = entry.qty;
+    var originals = answerOf(qty.o);
+    var copies = answerOf(qty.c);
+    var tail, phrase;
+    if (answerOf(qty.on) != "true" || (originals === "" && copies === "")) return "";
+    tail = qty.tail && answerOf(qty.tail[0]) !== "" ? fill(qty.tail[1]) : "";
+    if (originals == "0" && copies == "0") {
+      phrase = "";
+    } else if (originals === "" || originals == "0") {
+      phrase = " IN " + copies + " " + (copies == "1" ? "COPY" : "COPIES");
+    } else if (copies === "" || copies == "0") {
+      phrase = " IN " + originals + " " + (originals == "1" ? "ORIGINAL" : "ORIGINALS");
+    } else {
+      phrase = " IN " + originals + " " + (originals == "1" ? "ORIGINAL" : "ORIGINALS") + " AND " + copies + " " + (copies == "1" ? "COPY" : "COPIES");
+    }
+    if (phrase !== "" || tail !== "") return qty.head + phrase + tail + ".";
+    return "";
+  }
+
+  // {"id": q, ...}: the answer as typed, then shaped by "max", "as" and "codes".
+  function answerValue() {
+    var result = answerOf(entry.id);
+    var dateParts;
+    if (entry.max != null) result = result.slice(0, entry.max);
+    if (entry.as == "amount") {
+      // No commas. Always two decimals: 1250 -> 1250.00, 1250.5 -> 1250.50 (text that is not a number stays as it is).
+      result = result.replace(/,/g, "");
+      if (/^\d+$/.test(result)) result += ".00";
+      else if (/^\d+\.\d$/.test(result)) result += "0";
+    }
+    if (entry.as == "date") {
+      // DD/MM/YYYY -> YYYY-MM-DD (blank if it is not a date in that shape).
+      dateParts = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(result);
+      result = dateParts ? dateParts[3] + "-" + dateParts[2] + "-" + dateParts[1] : "";
+    }
+    if (entry.codes) result = entry.codes.hasOwnProperty(result) ? entry.codes[result] : "";
+    return result;
+  }
+
+  // Only if the entry's "if" condition holds (or it has none).
+  if (!entry["if"] || has(entry["if"][1], answerOf(entry["if"][0]))) {
+    if (entry.c != null) value = entry.c;
+    else if (entry.lines) value = linesValue();
+    else if (entry.join) value = joinValue();
+    else if (entry.tpl) value = templateValue();
+    else if (entry.qty) value = quantityValue();
+    else if (entry.id) value = answerValue();
+    if (entry.chop) value = lcPipeChop(value);
+  }
+  // A blank result uses the entry's own "d" text, if it has one.
+  if (value === "" && entry.d != null) value = entry.d;
+  return value;
 }
-// The records, as an array of text. A = the answers (default: read from the PDF).
-function lcPipeRecords(d, A) {
-var R = [], i, j, r;
-A = A || lcPipeAnswers(d);
-for (i = 0; i < lcPipe.length; i++) { r = ""; for (j = 0; j < lcPipe[i].length; j++) r += lcPipeValue(lcPipe[i][j], A) + "|"; R.push(r); }
-return R;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// lcPipeRecords(d, answers): the records, as a list of text (one text per record, each position followed by "|").
+//   d        the PDF document.
+//   answers  optional. The answers to use; by default they are read from the PDF.
+// ---------------------------------------------------------------------------------------------------------------------
+function lcPipeRecords(d, answers) {
+  var records = [];
+  var i, j, record;
+  answers = answers || lcPipeAnswers(d);
+  for (i = 0; i < lcPipe.length; i++) {
+    record = "";
+    for (j = 0; j < lcPipe[i].length; j++) record += lcPipeValue(lcPipe[i][j], answers) + "|";
+    records.push(record);
+  }
+  return records;
 }
-// What goes into the QR code: the records, a newline between them.
-function lcPipeText(d) { return lcPipeRecords(d).join("\n"); }
+
+// What goes into the QR code: the records, a new line between them.
+function lcPipeText(d) {
+  return lcPipeRecords(d).join("\n");
+}
 """[1:-1]
 
-# THE BUTTON AND EVENT SCRIPTS. Each section below, after its "// ==== name ====" line, is stored in the PDF
-# as one action. The lines before the first marker (this header) are not stored.
-#   check-form    the "Check form" button (top right of every page)
-#   reset-form    the "Reset form" button (top right of every page)
-#   generate-qr   the "Generate QR Code" button (QR page)
-#   print-form    the "Print Form" button (QR page)
-#   before-save   runs before the form is saved or printed
-# They call the functions in DOCUMENT_JS (lcRules, lcPayload, lcDrawQr, lcDates).
+# THE BUTTON AND EVENT SCRIPTS. Each entry below is stored in the PDF as one action (what happens when a button is
+# pressed, or the form is saved or printed). In each script, "this" is the PDF document.
+#   check-form          the "Check form" button (top right of every page)
+#   reset-form          the "Reset form" button (top right of every page)
+#   generate-qr         the "Generate QR Code" button (QR page)
+#   print-form          the "Print Form" button (QR page)
+#   generate-qr-pipe    the same two buttons, for the pipe-format form (they use lcPipeText instead of lcPayload)
+#   print-form-pipe
+#   before-save         runs before the form is saved or printed
+# They call the functions in DOCUMENT_JS (lcRules, lcPayload, lcDrawQr, lcDates ...).
+# A few exact pieces of text are looked for by build_all.py when it joins all the forms into one PDF, so they must stay
+# as they are: "getField(" (a dot before it), "this.print(true, 0, " and "this.resetForm();".
+# The list of problems that three of the scripts show is built in the same way in each (a script cannot share code with
+# another script, so it is written out each time): at most 15 lines, then "... and N more".
 BUTTON_JS = {
     "check-form": r"""
-// "CHECK FORM" BUTTON: lists what is missing or wrong (at most 15 of each) and puts the cursor on the first
-// problem; otherwise says the form is ready.
-if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
-else {
-var m = lcRules(this), b = m.bad || [], t = [];
-var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
-if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
-if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
-if (t.length) { app.alert("This form is not ready to send. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them before you send the form.", 1);
-  var g = m.first && this.getField(m.first); if (g) g.setFocus(); }
-else app.alert("All mandatory questions are answered and every answer is in the right format. You can save the form and send it.", 3);
+// "CHECK FORM" BUTTON.
+// What this does: lists what is still blank or wrong (at most 15 of each) and puts the cursor on the first problem.
+// If there is nothing to fix, it says the form is ready.
+// Example: 2 mandatory questions are blank and 1 answer is wrong -> one message that lists all 3 and says the red boxes
+// are the ones to fix.
+if (typeof lcRules != "function") {
+  // The document script did not run (JavaScript is off, or the form is damaged), so nothing can be checked.
+  app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
+} else {
+  var missing = lcRules(this);         // labels of the mandatory questions that are blank (it also has .bad and .first)
+  var wrong = missing.bad || [];       // "<question>: <what is wrong>" for each wrong answer
+  var messages = [];                   // the parts of the message to show
+
+  // "- first\n- second ..." with at most 15 lines; if there are more: "- ... and 3 more".
+  var bulletList = function (items) {
+    var text = "- " + items.slice(0, 15).join("\n- ");
+    if (items.length > 15) text += "\n- ... and " + (items.length - 15) + " more";
+    return text;
+  };
+
+  if (missing.length) {
+    messages.push(missing.length + " mandatory question" + (missing.length > 1 ? "s are" : " is") + " still blank:\n" + bulletList(missing));
+  }
+  if (wrong.length) {
+    messages.push(wrong.length + " answer" + (wrong.length > 1 ? "s need" : " needs") + " correcting:\n" + bulletList(wrong));
+  }
+
+  if (messages.length) {
+    app.alert("This form is not ready to send. The boxes concerned are outlined in red.\n\n" + messages.join("\n\n") + "\n\nPlease correct them before you send the form.", 1);
+    // Put the cursor in the first box with a problem.
+    var firstBox = missing.first && this.getField(missing.first);
+    if (firstBox) firstBox.setFocus();
+  } else {
+    app.alert("All mandatory questions are answered and every answer is in the right format. You can save the form and send it.", 3);
+  }
 }
 """[1:-1],
     "reset-form": r"""
-// "RESET FORM" BUTTON: asks first, then sets every answer back to how the form started, and re-checks.
+// "RESET FORM" BUTTON.
+// What this does: asks "are you sure?" first. If yes: sets every answer back to how the form started, wipes the QR codes,
+// and checks the form again (so the boxes get their starting colours).
+// (app.alert returns 4 when the person presses Yes.)
 if (app.alert("Are you sure you want to reset the form? All your answers will be cleared.", 2, 2) == 4) {
-this.resetForm(); if (typeof lcDrawQr == "function") try { lcDrawQr(this, ""); } catch (e) {} if (typeof lcDates == "function") lcDates(this); if (typeof lcRules == "function") lcRules(this); }
+  this.resetForm();
+  if (typeof lcDrawQr == "function") {
+    try { lcDrawQr(this, ""); } catch (e) {}   // "" = draw no codes and remove the extra pages; a failure here does not matter
+  }
+  if (typeof lcDates == "function") lcDates(this);
+  if (typeof lcRules == "function") lcRules(this);
+}
 """[1:-1],
     "generate-qr": r"""
-// "GENERATE QR CODE" BUTTON: refuses while anything is missing or wrong; otherwise makes the QR code from the
-// answers (lcPayload, lcDrawQr): one code, or as many as the answers need (at most 16; codes 3 and up go on extra pages
-// after the QR code page, two to a page). Then it goes to the QR code page.
-if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
-else {
-var m = lcRules(this), b = m.bad || [], t = [];
-var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
-if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
-if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
-if (t.length) { app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
-  var g = m.first && this.getField(m.first); if (g) g.setFocus(); }
-else { try { var q = this.getField("__qr"); q.value = lcPayload(this); var n = lcDrawQr(this, q.value), cut = [];
-  try { this.pageNum = q.page; } catch (e) {}   // a viewer may refuse to change page inside a click that added pages: the codes are drawn all the same
-  try { cut = JSON.parse(q.value).truncated || []; } catch (e) {}
-  if (n == 1) app.alert("The QR code has been generated from your answers (" + q.value.length + " characters). Press Print Form to print the form with the QR code.", 3);
-  else app.alert("Your answers (" + q.value.length + " characters) need " + n + " QR codes, so " + n + " codes have been generated: " + (n > 2 ? "two on the QR code page and the rest, two to a page, on the " + lcPagesFor(n) + " page" + (lcPagesFor(n) > 1 ? "s" : "") + " after it" : "one under the other") + ". The Bank scans all " + n + " codes. Press Print Form to print the form with the QR codes." +
-    (cut.length ? "\n\nEven " + n + " codes are too small for everything you typed, so these long answers were shortened in the QR codes (the form itself is unchanged): " + cut.join(", ") + "." : ""), cut.length ? 1 : 3); }
-  catch (e) { app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1); } }
+// "GENERATE QR CODE" BUTTON.
+// What this does: refuses while anything is missing or wrong. Otherwise it makes the QR code from the answers (lcPayload
+// makes the text, lcDrawQr draws the codes): one code, or as many as the answers need (at most 16; codes 3 and up go on
+// extra pages after the QR code page, two to a page). Then it goes to the QR code page and says what it did.
+if (typeof lcRules != "function") {
+  app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
+} else {
+  var missing = lcRules(this);         // labels of the mandatory questions that are blank (it also has .bad and .first)
+  var wrong = missing.bad || [];       // "<question>: <what is wrong>" for each wrong answer
+  var messages = [];                   // the parts of the message to show
+
+  // "- first\n- second ..." with at most 15 lines; if there are more: "- ... and 3 more".
+  var bulletList = function (items) {
+    var text = "- " + items.slice(0, 15).join("\n- ");
+    if (items.length > 15) text += "\n- ... and " + (items.length - 15) + " more";
+    return text;
+  };
+
+  if (missing.length) {
+    messages.push(missing.length + " mandatory question" + (missing.length > 1 ? "s are" : " is") + " still blank:\n" + bulletList(missing));
+  }
+  if (wrong.length) {
+    messages.push(wrong.length + " answer" + (wrong.length > 1 ? "s need" : " needs") + " correcting:\n" + bulletList(wrong));
+  }
+
+  if (messages.length) {
+    // Something to fix: no code is made.
+    app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + messages.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
+    var firstBox = missing.first && this.getField(missing.first);
+    if (firstBox) firstBox.setFocus();
+  } else {
+    try {
+      var qrBox = this.getField("__qr");          // the hidden box that keeps the text of the codes
+      qrBox.value = lcPayload(this);
+      var codeCount = lcDrawQr(this, qrBox.value);
+      var shortened = [];                         // long answers that had to be cut to fit 16 codes
+      try { this.pageNum = qrBox.page; } catch (e) {}   // a viewer may refuse to change page inside a click that added pages: the codes are drawn all the same
+      try { shortened = JSON.parse(qrBox.value).truncated || []; } catch (e) {}
+      if (codeCount == 1) {
+        app.alert("The QR code has been generated from your answers (" + qrBox.value.length + " characters). Press Print Form to print the form with the QR code.", 3);
+      } else {
+        // Where the codes are: two on the QR code page and the rest, two to a page, on the extra pages after it.
+        var whereAreThey;
+        if (codeCount > 2) {
+          whereAreThey = "two on the QR code page and the rest, two to a page, on the " + lcPagesFor(codeCount) + " page" + (lcPagesFor(codeCount) > 1 ? "s" : "") + " after it";
+        } else {
+          whereAreThey = "one under the other";
+        }
+        var cutNote = "";
+        if (shortened.length) {
+          cutNote = "\n\nEven " + codeCount + " codes are too small for everything you typed, so these long answers were shortened in the QR codes (the form itself is unchanged): " + shortened.join(", ") + ".";
+        }
+        app.alert("Your answers (" + qrBox.value.length + " characters) need " + codeCount + " QR codes, so " + codeCount + " codes have been generated: " + whereAreThey + ". The Bank scans all " + codeCount + " codes. Press Print Form to print the form with the QR codes." + cutNote, shortened.length ? 1 : 3);
+      }
+    } catch (e) {
+      app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1);
+    }
+  }
 }
 """[1:-1],
     "print-form": r"""
-// "PRINT FORM" BUTTON: prints only once the QR code exists and still matches the current answers, so the
-// printed codes always carry the answers on the paper: every code needed is on its page, none is left over, and the
+// "PRINT FORM" BUTTON.
+// What this does: prints only once the QR code exists and still matches the current answers, so the printed codes always
+// carry the answers that are on the paper. That means: every code needed is on its page, none is left over, and the
 // pages after the last code in use are not printed.
-var q = this.getField("__qr"), now = typeof lcPayload == "function" ? lcPayload(this) : "", same = false, bad = "";
-try { same = JSON.stringify(JSON.parse(q.value).data) == JSON.stringify(JSON.parse(now).data); } catch (e) {}
-try { bad = lcQrCheck(this, q.value); } catch (e) { bad = String(e); }
-if (!/\S/.test(q.value)) app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
-else if (!same) app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
-else if (bad) app.alert("The QR codes in the form do not match your answers (" + bad + "). Please press Generate QR Code again, then Print Form.", 1);
-else this.print(true, 0, lcLastPage(this, q.value), false, true);   // the form to the last QR code page in use
+// Example: answers were changed after Generate QR Code was pressed -> "Your answers have changed ... press Generate QR Code again".
+var qrBox = this.getField("__qr");
+var textNow = typeof lcPayload == "function" ? lcPayload(this) : "";   // what the codes should say, with today's answers
+var sameAnswers = false;      // do the codes on the form carry these answers?
+var codesProblem = "";        // what is wrong with the codes on the pages ("" = nothing)
+try { sameAnswers = JSON.stringify(JSON.parse(qrBox.value).data) == JSON.stringify(JSON.parse(textNow).data); } catch (e) {}
+try { codesProblem = lcQrCheck(this, qrBox.value); } catch (e) { codesProblem = String(e); }
+if (!/\S/.test(qrBox.value)) {
+  app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
+} else if (!sameAnswers) {
+  app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
+} else if (codesProblem) {
+  app.alert("The QR codes in the form do not match your answers (" + codesProblem + "). Please press Generate QR Code again, then Print Form.", 1);
+} else {
+  this.print(true, 0, lcLastPage(this, qrBox.value), false, true);   // the form up to the last QR code page in use
+}
 """[1:-1],
     # The pipe-format form's versions (FORM["qrFormat"] == "pipe"): the same buttons, with lcPipeText in place of lcPayload.
     "generate-qr-pipe": r"""
-// "GENERATE QR CODE" BUTTON (pipe-format form): as the ordinary one, but the QR codes hold the old smart form's 4 pipe-delimited
-// records (lcPipeText, a newline between records) instead of the JSON. lcDrawQr does not pad or change the text; as many codes
-// as the text needs (at most 16), the same pages as the ordinary form.
-if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was changed after it was built: ask the form's maintainer.", 1);
-else {
-var m = lcRules(this), b = m.bad || [], t = [];
-var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
-if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
-if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
-if (t.length) { app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
-  var g = m.first && this.getField(m.first); if (g) g.setFocus(); }
-else { try { var q = this.getField("__qr"), x = lcPipeText(this); q.value = x; var n = lcDrawQr(this, x);
-  try { this.pageNum = q.page; } catch (e) {}   // a viewer may refuse to change page inside a click that added pages: the codes are drawn all the same
-  if (n == 1) app.alert("The QR code has been generated from your answers (" + x.length + " characters). Press Print Form to print the form with the QR code.", 3);
-  else app.alert("Your answers (" + x.length + " characters) need " + n + " QR codes, so " + n + " codes have been generated" + (n > 2 ? ": two on the QR code page and the rest, two to a page, on the " + lcPagesFor(n) + " page" + (lcPagesFor(n) > 1 ? "s" : "") + " after it" : ", one under the other") + ". The Bank scans all " + n + " codes. Press Print Form to print the form with the QR codes.", 3); }
-  catch (e) { app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1); } }
+// "GENERATE QR CODE" BUTTON (pipe-format form).
+// What this does: the same as the ordinary Generate QR Code button, but the QR codes hold the old smart form's 4
+// pipe-delimited records (lcPipeText, a new line between records) instead of the JSON text. lcDrawQr does not pad or
+// change that text. As many codes as the text needs (at most 16), on the same pages as the ordinary form.
+if (typeof lcRules != "function") {
+  app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was changed after it was built: ask the form's maintainer.", 1);
+} else {
+  var missing = lcRules(this);         // labels of the mandatory questions that are blank (it also has .bad and .first)
+  var wrong = missing.bad || [];       // "<question>: <what is wrong>" for each wrong answer
+  var messages = [];                   // the parts of the message to show
+
+  // "- first\n- second ..." with at most 15 lines; if there are more: "- ... and 3 more".
+  var bulletList = function (items) {
+    var text = "- " + items.slice(0, 15).join("\n- ");
+    if (items.length > 15) text += "\n- ... and " + (items.length - 15) + " more";
+    return text;
+  };
+
+  if (missing.length) {
+    messages.push(missing.length + " mandatory question" + (missing.length > 1 ? "s are" : " is") + " still blank:\n" + bulletList(missing));
+  }
+  if (wrong.length) {
+    messages.push(wrong.length + " answer" + (wrong.length > 1 ? "s need" : " needs") + " correcting:\n" + bulletList(wrong));
+  }
+
+  if (messages.length) {
+    // Something to fix: no code is made.
+    app.alert("The QR code cannot be generated yet. The boxes concerned are outlined in red.\n\n" + messages.join("\n\n") + "\n\nPlease correct them, then press Generate QR Code again.", 1);
+    var firstBox = missing.first && this.getField(missing.first);
+    if (firstBox) firstBox.setFocus();
+  } else {
+    try {
+      var qrBox = this.getField("__qr");          // the hidden box that keeps the text of the codes
+      var recordsText = lcPipeText(this);
+      qrBox.value = recordsText;
+      var codeCount = lcDrawQr(this, recordsText);
+      try { this.pageNum = qrBox.page; } catch (e) {}   // a viewer may refuse to change page inside a click that added pages: the codes are drawn all the same
+      if (codeCount == 1) {
+        app.alert("The QR code has been generated from your answers (" + recordsText.length + " characters). Press Print Form to print the form with the QR code.", 3);
+      } else {
+        // Where the codes are: two on the QR code page and the rest, two to a page, on the extra pages after it.
+        var whereAreThey;
+        if (codeCount > 2) {
+          whereAreThey = ": two on the QR code page and the rest, two to a page, on the " + lcPagesFor(codeCount) + " page" + (lcPagesFor(codeCount) > 1 ? "s" : "") + " after it";
+        } else {
+          whereAreThey = ", one under the other";
+        }
+        app.alert("Your answers (" + recordsText.length + " characters) need " + codeCount + " QR codes, so " + codeCount + " codes have been generated" + whereAreThey + ". The Bank scans all " + codeCount + " codes. Press Print Form to print the form with the QR codes.", 3);
+      }
+    } catch (e) {
+      app.alert("The QR code could not be generated: " + e + "\nPlease send this message to the form's maintainer.", 1);
+    }
+  }
 }
 """[1:-1],
     "print-form-pipe": r"""
-// "PRINT FORM" BUTTON (pipe-format form): prints only once the QR codes exist and still carry the current records, every code
-// needed is on its page and none is left over. The hidden box may keep, change or drop the newlines between records (the records
-// hold none), so the comparison, and the code count, use the current records, not the stored text.
-var q = this.getField("__qr"), now = typeof lcPipeText == "function" ? lcPipeText(this) : "", same = false, bad = "";
-try { same = String(q.value).replace(/[\r\n]/g, "") == now.replace(/[\r\n]/g, ""); } catch (e) {}
-try { bad = lcQrCheck(this, now); } catch (e) { bad = String(e); }
-if (!/\S/.test(q.value)) app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
-else if (!same) app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
-else if (bad) app.alert("The QR codes in the form do not match your answers (" + bad + "). Please press Generate QR Code again, then Print Form.", 1);
-else this.print(true, 0, lcLastPage(this, now), false, true);   // the form to the last QR code page in use
+// "PRINT FORM" BUTTON (pipe-format form).
+// What this does: prints only once the QR codes exist and still carry the current records, every code needed is on its
+// page and none is left over. The hidden box may keep, change or drop the new lines between records (the records
+// hold none themselves), so the comparison, and the count of codes, use the current records, not the stored text.
+var qrBox = this.getField("__qr");
+var recordsNow = typeof lcPipeText == "function" ? lcPipeText(this) : "";   // what the codes should say, with today's answers
+var sameAnswers = false;      // do the codes on the form carry these records?
+var codesProblem = "";        // what is wrong with the codes on the pages ("" = nothing)
+try { sameAnswers = String(qrBox.value).replace(/[\r\n]/g, "") == recordsNow.replace(/[\r\n]/g, ""); } catch (e) {}
+try { codesProblem = lcQrCheck(this, recordsNow); } catch (e) { codesProblem = String(e); }
+if (!/\S/.test(qrBox.value)) {
+  app.alert("Please press Generate QR Code first, so the printed form carries the QR code.", 1);
+} else if (!sameAnswers) {
+  app.alert("Your answers have changed since the QR code was generated. Please press Generate QR Code again, then Print Form.", 1);
+} else if (codesProblem) {
+  app.alert("The QR codes in the form do not match your answers (" + codesProblem + "). Please press Generate QR Code again, then Print Form.", 1);
+} else {
+  this.print(true, 0, lcLastPage(this, recordsNow), false, true);   // the form up to the last QR code page in use
+}
 """[1:-1],
     "before-save": r"""
-// BEFORE SAVING OR PRINTING: the same list as Check form, shown only if something is missing or wrong, plus a warning
-// when QR codes were generated and the pages no longer hold them all (lcQrCheck). It warns but doesn't stop the save or print.
-if (typeof lcRules != "function") app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
-else {
-var m = lcRules(this), b = m.bad || [], t = [];
-var list = function (a) { return "- " + a.slice(0, 15).join("\n- ") + (a.length > 15 ? "\n- ... and " + (a.length - 15) + " more" : ""); }
-if (m.length) t.push(m.length + " mandatory question" + (m.length > 1 ? "s are" : " is") + " still blank:\n" + list(m));
-if (b.length) t.push(b.length + " answer" + (b.length > 1 ? "s need" : " needs") + " correcting:\n" + list(b));
-try { var qf = this.getField("__qr"), qb = qf && /\S/.test(qf.value) && typeof lcQrCheck == "function" ? lcQrCheck(this, qf.value) : ""; if (qb) t.push("The QR codes in the form are not complete (" + qb + "). Press Generate QR Code again."); } catch (e) {}
-// Shown once: an event that fires again within 3 seconds of the warning closing is a repeat, not a new save / print.
-if (t.length && new Date().getTime() - lcWarnedAt > 3000) {
-  app.alert((event.name == "WillPrint" ? "Before printing: " : "Before saving: ") + "this form is not ready to send. The boxes concerned are outlined in red.\n\n" + t.join("\n\n") + "\n\nPlease correct them before you send the form.", 1);
-  lcWarnedAt = new Date().getTime(); }
+// BEFORE SAVING OR PRINTING.
+// What this does: shows the same list as Check form, but only if something is missing or wrong. It adds a warning when QR
+// codes were generated and the pages no longer hold them all (lcQrCheck). It only warns: it does not stop the save or print.
+if (typeof lcRules != "function") {
+  app.alert("The form's checks did not start, so nothing has been checked yet. Open the form in Adobe Acrobat or Acrobat Reader and allow JavaScript (the yellow bar's Options, or Preferences > JavaScript > Enable Acrobat JavaScript), then close and reopen the form. If it still happens, the form was built from damaged files: build it again.", 1);
+} else {
+  var missing = lcRules(this);         // labels of the mandatory questions that are blank (it also has .bad and .first)
+  var wrong = missing.bad || [];       // "<question>: <what is wrong>" for each wrong answer
+  var messages = [];                   // the parts of the message to show
 
+  // "- first\n- second ..." with at most 15 lines; if there are more: "- ... and 3 more".
+  var bulletList = function (items) {
+    var text = "- " + items.slice(0, 15).join("\n- ");
+    if (items.length > 15) text += "\n- ... and " + (items.length - 15) + " more";
+    return text;
+  };
+
+  if (missing.length) {
+    messages.push(missing.length + " mandatory question" + (missing.length > 1 ? "s are" : " is") + " still blank:\n" + bulletList(missing));
+  }
+  if (wrong.length) {
+    messages.push(wrong.length + " answer" + (wrong.length > 1 ? "s need" : " needs") + " correcting:\n" + bulletList(wrong));
+  }
+
+  // If QR codes were generated: are they all still on the pages?
+  try {
+    var qrBox = this.getField("__qr");
+    var codesProblem = qrBox && /\S/.test(qrBox.value) && typeof lcQrCheck == "function" ? lcQrCheck(this, qrBox.value) : "";
+    if (codesProblem) messages.push("The QR codes in the form are not complete (" + codesProblem + "). Press Generate QR Code again.");
+  } catch (e) {}
+
+  // Shown once: an event that fires again within 3 seconds of the warning closing is a repeat, not a new save / print.
+  if (messages.length && new Date().getTime() - lcWarnedAt > 3000) {
+    app.alert((event.name == "WillPrint" ? "Before printing: " : "Before saving: ") + "this form is not ready to send. The boxes concerned are outlined in red.\n\n" + messages.join("\n\n") + "\n\nPlease correct them before you send the form.", 1);
+    lcWarnedAt = new Date().getTime();
+  }
 }
 """[1:-1],
 }

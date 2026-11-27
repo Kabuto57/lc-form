@@ -12,7 +12,8 @@ THE FILES THAT BUILD A FORM (the engine files together in one folder, the form f
     acrobat_js.py   The JavaScript Acrobat runs inside the PDF (red boxes, Check form, QR codes: as many as the answers
                     need, up to 16, the third onwards on extra QR pages that exist only while needed). To stay quick it
                     re-checks only the questions that read the box you just left (an index pdf_writer.py builds from the
-                    form file), once per change, and skips writing boxes whose look is unchanged.
+                    form file), once per change, and skips writing boxes whose look is unchanged. It is written to be read:
+                    plain names, one statement per line, and a comment on every function and every rule.
 You only ever edit form files. The other four are the same for every form.
     proof_multiqr.py  Not part of the build: after changing the QR code scripts, run it to prove 1 to 16 codes decode (README).
     forms/lc_pipe_form.py is the LC form again with the old smart form's pipe-delimited text in the QR code (FORM["qrFormat"] = "pipe"

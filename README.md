@@ -570,7 +570,7 @@ only up to the last QR page in use).
    that order: the result is exactly the JSON above. The slices are equal runs of *bytes*, so a multi-byte character can
    straddle two codes: a reader must join the codes' bytes first and only then decode the text. Text too long for 16 codes is refused with a message; a code
    that can't be read is never drawn.
-3. **The code: `lcQrMatrix` (`acrobat_js.py`).** A standard QR encoder, about 70 lines.
+3. **The code: `lcQrMatrix` (`acrobat_js.py`).** A standard QR encoder, written step by step with a comment on each step (fixed patterns, data bits, error correction, placing the bits, mask).
    - It makes a version 40 code (177 × 177 squares), with error correction level M, byte mode and mask 0.
    - It places the fixed patterns (finders, timing, alignment, format and version bits).
    - It adds Reed-Solomon error correction: 49 blocks, 28 correction bytes each.
@@ -985,3 +985,14 @@ layout: box widths are worked out from the label and `max`.
     hostile and Print Form checks.
 42. **No page limit (`build.py`, `pdf_writer.py`, every form file).** The `PAGES` setting and its check are gone: a new
     question that no longer fits on a form's pages adds a page instead of stopping the build with `expected 4 pages`.
+43. **`acrobat_js.py` rewritten to be readable (no behaviour change).** Every script in the file (the rules engine `lcRules` /
+    `lcWords` / `lcDates`, the QR text `lcPayload`, the QR encoder `lcQrMatrix`, the page helpers `lcExtra` / `lcSlot` /
+    `lcQrCheck` / `lcDrawQr`, the pipe-format functions, and every button and the before-save script) now has descriptive
+    names instead of one-letter ones, one statement per line, small named helpers (for example one `parseDate` used by both
+    the date check and rules 1-4, in place of two copies of the same pattern), named constants for the magic numbers (hidden
+    = 1, the grey and pink colours, "Off"), and a plain-words comment on every function (what it does, what it takes and
+    returns, an example). Each of rules 1-9 in `across()` says in everyday words what it stops, with one example.
+    The QR encoder's arithmetic is unchanged. The comments no longer repeat the capital-letter placeholders
+    (`__MODEL__` and the others), because the build fills those in everywhere in the script, comments included, which had pasted the whole
+    rules table into a comment. Proven with a differential test (not committed): the old and the new scripts, run in node against the same
+    fake Acrobat document, gave identical results, field writes and QR codes on tens of thousands of random cases.

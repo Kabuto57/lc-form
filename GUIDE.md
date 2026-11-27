@@ -158,4 +158,5 @@ Moved out of this repo to `~/Documents/lc-form-extras` (not needed to build).
 
 Ask someone who knows Python if you want to change **how every form looks or works** rather than what one form
 asks: colours and sizes (`layout.py`, section 1), how questions are arranged (`layout.py`, section 4), what the
-buttons or checks do (`acrobat_js.py`), or what the QR code contains. `README.md` explains each of these.
+buttons or checks do (`acrobat_js.py`), or what the QR code contains. `README.md` explains each of these. `acrobat_js.py`
+is written to be read: every function and every rule has a comment in plain words with an example.
