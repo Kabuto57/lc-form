@@ -1025,7 +1025,7 @@ function lcSlot(d, extraPages, j) {
 // lcSpawnExtra(d, name, nPage): copies the hidden page template called name into the document, before page nPage
 // (0 = the first page; d.numPages = after the last one). The new page's boxes are renamed, as lcDrawQr needs.
 // Two ways, because the free Acrobat Reader is not known to allow the first (untested; Adobe's reference says the
-// template feature does not work in Reader, but the Reader seen on 27 Nov did copy pages):
+// template feature does not work in Reader, and whether the free Reader can copy pages is not known yet):
 //   1. Template.spawn, from d.getTemplate(name) (Acrobat 5 and later; getTemplate gives null when it finds no template).
 //   2. Doc.spawnPageFromTemplate(cTemplate, nPage, bRename, bOverlay), the older call (deprecated, same effect).
 //      Adobe's JavaScript reference (Doc.spawnPageFromTemplate):
