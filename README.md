@@ -353,14 +353,14 @@ applies then, but stays optional.
 | 10.2 | `transhipment` | Transhipment | pick one: allowed / not allowed | **always** |  |  |
 | 10.3 | `shipment_from` | Shipment from | drop-down: Port of Loading / Airport of Departure / Dispatch from / Place of Taking in charge / Place of Receipt | no |  |  |
 | 10.4 | `shipment_from_port` | Port of Loading / Airport of Departure | text | when 10.3 is Port of Loading, Place of Taking in charge or Place of Receipt | 35 |  |
-| 10.5 | `shipment_from_port_2` | Port of Loading / Airport of Departure (line 2) | text | no (unlocked when 10.4 is) | 35 |  |
+| 10.5 | `shipment_from_port_2` | Port (line 2) | text | no (unlocked when 10.4 is) | 35 |  |
 | 10.6 | `shipment_from_place` | Dispatch from / Place of Taking in Charge / Place of Receipt | text | when 10.3 is Dispatch from, Place of Taking in charge or Place of Receipt | 35 |  |
-| 10.7 | `shipment_from_place_2` | Dispatch from / Place of Taking in Charge / Place of Receipt (line 2) | text | no (unlocked when 10.6 is) | 35 |  |
+| 10.7 | `shipment_from_place_2` | Place (line 2) | text | no (unlocked when 10.6 is) | 35 |  |
 | 10.8 | `shipment_to` | Shipment to | drop-down: Port of Discharge / Airport of Destination / For Transportation to / Place of Final Destination / Place of Delivery | no |  |  |
 | 10.9 | `shipment_to_port` | Port of Discharge / Airport of Destination | text | when 10.8 is Port of Discharge, Place of Final Destination or Place of Delivery | 35 |  |
-| 10.10 | `shipment_to_port_2` | Port of Discharge / Airport of Destination (line 2) | text | no (unlocked when 10.9 is) | 35 |  |
+| 10.10 | `shipment_to_port_2` | Port (line 2) | text | no (unlocked when 10.9 is) | 35 |  |
 | 10.11 | `shipment_to_place` | For Transportation to / Place of Final Destination / Place of Delivery | text | when 10.8 is For Transportation to, Place of Final Destination or Place of Delivery | 35 |  |
-| 10.12 | `shipment_to_place_2` | For Transportation to / Place of Final Destination / Place of Delivery (line 2) | text | no (unlocked when 10.11 is) | 35 |  |
+| 10.12 | `shipment_to_place_2` | Place (line 2) | text | no (unlocked when 10.11 is) | 35 |  |
 | 10.13 | `latest_shipment_date` | Latest shipment date | date | no |  |  |
 
 **11. Expiry and Presentation**
@@ -1022,3 +1022,5 @@ layout: box widths are worked out from the label and `max`.
     Receipt place (and For Transportation to / Final Destination / Delivery place), no longer the port. In the pipe form 1_16 / 1_21
     read the port boxes and 1_17 / 1_22 the place boxes (no "if" any more: the boxes are cleared when they do not apply).
     `check_pipe.py` compares all 4 + 4 choices with the old barcode code and checks the greying, locking and mandatory state.
+    The line 2 boxes are labelled just "Port (line 2)" / "Place (line 2)", and the Shipment section starts on a new page (`new_page=True`)
+    so the drop-down stays with its boxes (it had been left alone at the bottom of page 1).
