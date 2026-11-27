@@ -7,6 +7,7 @@ THE FILES THAT BUILD A FORM (the engine files together in one folder, the form f
                     questions. "python build.py lc_form.py" finds it in forms/.
     build.py        THIS FILE. Run it. Its first section lists every kind of question and every option.
     layout.py       Step 1: where everything goes on the page (and the colours, sizes and answer formats).
+                    No page limit: a longer form simply gets more pages.
     pdf_writer.py   Steps 2 and 3: adds the checks and buttons, writes the PDF, then checks the PDF.
     acrobat_js.py   The JavaScript Acrobat runs inside the PDF (red boxes, Check form, QR codes: as many as the answers
                     need, up to 16, the third onwards on extra QR pages that exist only while needed). To stay quick it
@@ -318,7 +319,6 @@ def load_form(path):
         raise SystemExit(f"{path} has no FORM = {{...}}. Copy example_form.py to see what a form file needs.")
     spec.DEFAULTS = getattr(spec, "DEFAULTS", {})
     spec.PDF_NAME = getattr(spec, "PDF_NAME", re.sub(r"\W+", "-", spec.FORM["title"]).strip("-") + ".pdf")
-    spec.PAGES = getattr(spec, "PAGES", None)
     spec.IN_MENU = getattr(spec, "IN_MENU", True)   # False: build_all.py's menu must not list this form (e.g. lc_pipe_form.py)
     return spec
 

@@ -19,4 +19,3 @@ FORM = {
 DEFAULTS = {"value_received_1": "AS PER INVOICE"}
 
 PDF_NAME = "Bill-of-Exchange-OBC.pdf"
-PAGES = None

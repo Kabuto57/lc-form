@@ -71,4 +71,3 @@ FORM = {
 DEFAULTS = {}
 
 PDF_NAME = "SBLC-Amendment.pdf"
-PAGES = None

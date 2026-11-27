@@ -134,4 +134,3 @@ FORM = {
 DEFAULTS = {}
 
 PDF_NAME = "BG-Application.pdf"
-PAGES = None

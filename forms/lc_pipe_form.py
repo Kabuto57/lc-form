@@ -45,7 +45,7 @@ place goes into 1_17 / 1_22; long text is padded to 65 characters (the old docum
 """
 import copy
 
-from lc_form import COUNTRIES, CURRENCIES, DEFAULTS, FORM as LC_FORM, PAGES  # noqa: F401  (COUNTRIES, CURRENCIES: the LC form's lists)
+from lc_form import COUNTRIES, CURRENCIES, DEFAULTS, FORM as LC_FORM  # noqa: F401  (COUNTRIES, CURRENCIES: the LC form's lists)
 
 FROM_PORT = ["Port of Loading / Airport of Departure"]
 FROM_PLACE = ["Dispatch from", "Place of Taking in charge", "Place of Receipt"]

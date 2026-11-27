@@ -105,4 +105,3 @@ FORM = {
 DEFAULTS = {"tenor": "Sight", "goods_description": "AS PER INVOICE"}
 
 PDF_NAME = "OBC-Application.pdf"
-PAGES = None

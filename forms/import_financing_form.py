@@ -131,4 +131,3 @@ FORM = {
 DEFAULTS = {"trade_nature": "Purchase of Goods"}
 
 PDF_NAME = "Import-Financing.pdf"
-PAGES = None

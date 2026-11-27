@@ -72,4 +72,3 @@ FORM = {
 DEFAULTS = {}
 
 PDF_NAME = "LC-Amendment.pdf"
-PAGES = None

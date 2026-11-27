@@ -205,4 +205,3 @@ DEFAULTS = {
 }
 
 PDF_NAME = "LC-Application.pdf"   # written to out/
-PAGES = 4                          # the build stops if the form needs more than 4 pages (QR code page included)

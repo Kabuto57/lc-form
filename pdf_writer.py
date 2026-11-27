@@ -537,14 +537,12 @@ def build(form, answers):
 # (The scripts themselves run only inside Acrobat; test them there, see README "Testing in Acrobat".)
 
 def self_check(pdf_bytes, spec):
-    """spec: the form file (FORM, DEFAULTS, PAGES). Returns a one-line summary; stops with the reason if anything is wrong."""
+    """spec: the form file (FORM, DEFAULTS). Returns a one-line summary; stops with the reason if anything is wrong."""
     pdf = pikepdf.open(io.BytesIO(pdf_bytes))
     fields = {str(f.T): f for f in pdf.Root.AcroForm.Fields}
     questions = [q for s in spec.FORM["sections"] for q in s["fields"]]
     problems = pdf.check_pdf_syntax()
     assert not problems, f"PDF structure problems: {problems}"
-    if spec.PAGES:
-        assert len(pdf.pages) == spec.PAGES, f"expected {spec.PAGES} pages (PAGES in the form file), got {len(pdf.pages)}"
 
     # Every question has its fields: dates a list + a calendar box, "tick any" one box per option.
     for q in questions:

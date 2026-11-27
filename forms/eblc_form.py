@@ -133,4 +133,3 @@ DEFAULTS = {
 }
 
 PDF_NAME = "EBLC-Application.pdf"
-PAGES = None

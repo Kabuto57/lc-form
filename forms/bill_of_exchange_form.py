@@ -59,4 +59,3 @@ FORM = {
 DEFAULTS = {}
 
 PDF_NAME = "Bill-of-Exchange.pdf"
-PAGES = None

@@ -89,4 +89,3 @@ FORM = {
 DEFAULTS = {}
 
 PDF_NAME = "SBLC-Application.pdf"
-PAGES = None

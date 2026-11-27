@@ -111,8 +111,7 @@ The kinds of question: `text` (one line), `long` (paragraph), `date`, `radio` (p
    PROBLEM IN THE FORM FILE: question 2.6 ("handover_notes"): requiredIf refers to "hand_over", but no question has that id.
    ```
    Fix that line and build again. Nothing is saved until the build passes.
-3. If it says `expected 4 pages`, your change made the LC form longer than its approved 4 pages. Shorten something,
-   or (if a longer form is approved) change `PAGES = 4` at the end of `lc_form.py`.
+3. There is no page limit: if your change makes a form longer, it simply gets another page.
 4. **Open `out/LC-Application.pdf` in Acrobat** and check your change: red boxes, Check form, Generate QR Code.
 5. If you changed questions, update the table in `README.md` ("Every question"), and tell the Bank's system team
    about new or renamed ids: they read the answers from the QR code by id.

@@ -18,4 +18,3 @@ FORM = {
 DEFAULTS = {}
 
 PDF_NAME = "Bill-of-Exchange-EBLC.pdf"
-PAGES = None

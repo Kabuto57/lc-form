@@ -3,7 +3,7 @@
 This project builds one PDF: the **Irrevocable Documentary Credit Application** (Demo Bank, Form LC-01 · v1.0 · Nov 2026).
 It's a fillable form with Adobe Acrobat JavaScript checks and a QR code page. It's built in **Python**.
 
-- 4 pages: 3 pages of questions, plus the QR code page. Long answers add extra QR code pages while they are needed (up to 7 more, two codes each).
+- 4 pages today: 3 pages of questions, plus the QR code page (no page limit: more questions add pages). Long answers add extra QR code pages while they are needed (up to 7 more, two codes each).
 - 835 PDF fields: 108 questions, plus date lists, tick-any boxes, buttons and the rows of four QR codes (177 each: two on the QR code page, two on the extra QR code page, which is a hidden template until needed).
 
 ## Libraries used
@@ -80,7 +80,7 @@ below describe `lc_form.py`: when you change the form, update them here too.
 ```
                  ┌──────────────────────────────────────────────────────────────┐
   forms/         │ THE FORM (what it asks): 108 questions, options and rules    │  ← you edit this
-  lc_form.py     │ FORM, DEFAULTS, and the settings PDF_NAME, PAGES             │
+  lc_form.py     │ FORM, DEFAULTS, and the setting PDF_NAME                     │
                  └──────────────────────────────┬───────────────────────────────┘
                                                 ▼  python build.py lc_form.py
                  ┌──────────────────────────────────────────────────────────────┐
@@ -122,7 +122,7 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 
 | File | Purpose | Who opens it |
 |---|---|---|
-| `forms/lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and two build settings (`PDF_NAME`, `PAGES`). | Anyone changing the form |
+| `forms/lc_form.py` | **The LC form.** Every question, one line each: wording, kind, options, mandatory rules, limits, formats. Also the currency list, the starting answers, and one build setting (`PDF_NAME`). | Anyone changing the form |
 | `forms/lc_pipe_form.py` | **The LC form with the old smart form's pipe-delimited QR text** (Form LC-01P): imports `lc_form.py`, adds `FORM["qrFormat"] = "pipe"` and the 62-position table `FORM["pipe"]`; `IN_MENU = False` (not in `build_all.py`). See "The pipe-format form" below. | Anyone changing the pipe format |
 | `check_pipe.py`, `check_pipe_mock.js` | The oracle test of the pipe form: its records against the old form's own barcode code (`python check_pipe.py [--decode]`). Not needed to build. | Whoever changes `lc_pipe_form.py` or `PIPE_JS` |
 | `forms/example_form.py` | A small, fully commented example form (Annual Leave Request). Copy it to start a new form; name the copy `<something>_form.py`. | Anyone making a new form |
@@ -148,7 +148,6 @@ form files: `python build.py lc_form.py` looks there, and says so if the file is
 | How tall a paragraph box is | add `height=80` (points, default 50) to its `long(...)` line |
 | Buttons inside a section (Check form, Reset form, Generate QR Code, Print Form) | `buttons=["check-form", "print-form"]` on its `section(...)`; what they do is `BUTTON_JS` in `acrobat_js.py` |
 | Add or remove a question | `forms/lc_form.py` (nothing else: the checks follow the form) |
-| The number of pages the form must fit on | `PAGES` in `forms/lc_form.py` |
 | Make a new form | copy `forms/example_form.py` to `forms/<name>_form.py` (see [GUIDE.md](GUIDE.md)) |
 | Colours, text sizes, spacing, margins, answer formats | `layout.py`, section 1 |
 | How sections and questions are arranged | `layout.py`, section 4 |
@@ -984,3 +983,5 @@ layout: box widths are worked out from the label and `max`.
     records' layout (`lcPipeAnswers`), Print Form no longer depends on how Acrobat stores the newlines between records, and
     `build.py` refuses `"codes"` on a question without options (a tick box accepts only the key `true`). `check_pipe.py` has the
     hostile and Print Form checks.
+42. **No page limit (`build.py`, `pdf_writer.py`, every form file).** The `PAGES` setting and its check are gone: a new
+    question that no longer fits on a form's pages adds a page instead of stopping the build with `expected 4 pages`.

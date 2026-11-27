@@ -75,4 +75,3 @@ FORM = {
 DEFAULTS = {}
 
 PDF_NAME = "BG-Amendment.pdf"
-PAGES = None
